@@ -56,6 +56,11 @@ export default function App() {
     await refresh();
   };
 
+  const handleAttach = async (containerName: string) => {
+    await api.attachContainer(containerName);
+    await refresh();
+  };
+
   return (
     <>
       <h1>kingdom-proxy</h1>
@@ -83,6 +88,7 @@ export default function App() {
               onSelectTarget={(containerName, containerPort) =>
                 setPrefill({ containerName, containerPort })
               }
+              onAttach={handleAttach}
             />
           )}
         </>

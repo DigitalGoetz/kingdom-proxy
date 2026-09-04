@@ -41,6 +41,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   getConfig: () => request<Config>("/config"),
   getContainers: () => request<ContainerSummary[]>("/containers"),
+  attachContainer: (containerName: string) =>
+    request<{ container_name: string; network_name: string }>(
+      `/containers/${encodeURIComponent(containerName)}/attach-network`,
+      { method: "POST" },
+    ),
 
   createRoute: (input: NewRouteInput) =>
     request<RouteWithWarning>("/routes", { method: "POST", body: JSON.stringify(input) }),

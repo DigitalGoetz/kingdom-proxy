@@ -199,13 +199,26 @@ status. Each route also has an **Open ↗** link to it in a new tab. It
 talks to the admin API at `/_proxy/*` on the same origin, so there's no
 separate host/port to configure and nothing extra to expose.
 
-Below that, a **read-only containers panel** lists every currently-running
+Below that, a **containers panel** lists every currently-running
 container on the host (not just ones already on `kingdom-net`) with the
 ports each one listens on, to help you find what to route to — click a
-port to fill it into the create-route form above. A container not yet on
-`kingdom-net` is flagged as such; a route to it will 502 until you run
-`docker network connect kingdom-net <container>` (or the `podman`
-equivalent).
+port to fill it into the create-route form above. It's read-only except
+for one thing: a container not yet on `kingdom-net` is flagged as such
+with an **Attach** button, doing the equivalent of
+`docker network connect kingdom-net <container>` (which any container
+needs before a route to it will work — see
+[How a route gets applied](#how-a-route-gets-applied)) without leaving
+the dashboard or touching a terminal. It's idempotent (safe to click on
+something already attached) and doesn't itself create a route.
+
+This works for *any* running container regardless of what created it —
+another `docker-compose.yml`, a bare `docker run`, Podman, anything on
+the same engine — not just containers already in kingdom-proxy's own
+stack. The one caveat: `docker network connect` isn't persistent config,
+so a container that gets recreated later (an image update via its own
+compose file, say) will need Attach again unless you also add
+`kingdom-net` as an `external: true` network in *that* container's own
+compose file.
 
 For local UI development against a running stack:
 
@@ -261,7 +274,8 @@ the API's own, with the `/_proxy` prefix already stripped.
 | GET    | `/healthz`     | Liveness check.                                |
 | GET    | `/status`      | Last sync result, timestamp, route count.      |
 | GET    | `/config`      | Everything the web dashboard needs in one call: all routes, `reserved_path_prefix`, `network_name`, and sync status. |
-| GET    | `/containers`  | Read-only: every running container on the host, with `id`, `name`, `image`, `status`, `ports`, and `on_network` (whether it's attached to `network_name`). |
+| GET    | `/containers`  | Every running container on the host, with `id`, `name`, `image`, `status`, `ports`, and `on_network` (whether it's attached to `network_name`). |
+| POST   | `/containers/{name}/attach-network` | Attaches that container to `network_name` (`docker network connect` equivalent). Idempotent; doesn't create a route. |
 | GET    | `/routes`      | List all routes.                               |
 | POST   | `/routes`      | Create a route (see body above).               |
 | GET    | `/routes/{id}` | Fetch one route.                               |
@@ -351,7 +365,10 @@ KP_NGINX_CONF_PATH=/tmp/kingdom-routes.conf \
   panel) makes this tradeoff concretely visible rather than just
   theoretical: it lists every running container on the *host*, including
   ones with nothing to do with this stack — container and image names,
-  status, and listening ports.
+  status, and listening ports. `POST /containers/{name}/attach-network`
+  goes a step further and actually acts on that reach: anyone who can
+  reach the admin API can attach any host container to `kingdom-net`,
+  the same as they could with `docker network connect` directly.
 - `path_prefix` and `container_name` are validated against a strict
   allow-list of characters before being interpolated into generated nginx
   config, since there's no templating engine doing escaping for us.

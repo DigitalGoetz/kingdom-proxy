@@ -48,6 +48,15 @@ class DockerClient {
   // (if non-null) is filled with whatever nginx printed to help debugging.
   bool reload_nginx(const std::string& container_name, std::string* detail = nullptr) const;
 
+  // Attaches a container to a docker network (`docker network connect
+  // <network_name> <container_name_or_id>`) -- what a route needs before
+  // it can resolve that container by name at all. Idempotent: attaching a
+  // container that's already on the network is treated as success, not an
+  // error. Returns false with `detail` filled in (if non-null) if the
+  // network or container doesn't exist, or the daemon otherwise refuses.
+  bool connect_network(const std::string& network_name, const std::string& container_name_or_id,
+                        std::string* detail = nullptr) const;
+
  private:
   struct ExecResult {
     bool ok = false;

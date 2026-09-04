@@ -137,6 +137,47 @@ std::vector<ContainerSummary> DockerClient::list_containers() const {
   return summaries;
 }
 
+bool DockerClient::connect_network(const std::string& network_name,
+                                    const std::string& container_name_or_id,
+                                    std::string* detail) const {
+  auto client = make_client(socket_path_);
+  const json body = {{"Container", container_name_or_id}};
+  auto res = client.Post(std::format("/networks/{}/connect", network_name), body.dump(),
+                          "application/json");
+
+  if (!res) {
+    KP_LOG_ERROR(kComponent, "failed to reach docker socket at '{}': {}", socket_path_,
+                 httplib::to_string(res.error()));
+    throw std::runtime_error(std::format("cannot reach docker socket at '{}'", socket_path_));
+  }
+  if (res->status == 200) {
+    KP_LOG_INFO(kComponent, "attached '{}' to network '{}'", container_name_or_id, network_name);
+    return true;
+  }
+
+  std::string message = res->body;
+  try {
+    message = json::parse(res->body).value("message", res->body);
+  } catch (const json::parse_error&) {
+    // Not JSON -- fall back to the raw body above.
+  }
+
+  // Docker returns 403 for "endpoint already exists" -- i.e. the container
+  // is already on this network. Attaching is meant to be idempotent (the
+  // dashboard doesn't need to track whether it already did this), so treat
+  // that one case as success rather than an error.
+  if (res->status == 403) {
+    KP_LOG_INFO(kComponent, "'{}' is already attached to network '{}' ({})", container_name_or_id,
+                network_name, message);
+    return true;
+  }
+
+  if (detail != nullptr) *detail = message;
+  KP_LOG_ERROR(kComponent, "failed to attach '{}' to network '{}': HTTP {}: {}",
+               container_name_or_id, network_name, res->status, message);
+  return false;
+}
+
 DockerClient::ExecResult DockerClient::exec(const std::string& container_name,
                                              const std::vector<std::string>& cmd) const {
   auto client = make_client(socket_path_);

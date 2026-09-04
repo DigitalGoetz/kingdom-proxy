@@ -121,6 +121,43 @@ void ApiServer::setup_routes() {
     res.set_content(containers.dump(), "application/json");
   });
 
+  // Attaches a container to this stack's network -- the one-time step a
+  // container needs (regardless of what created it: another compose
+  // stack, a bare `docker run`, anything) before a route to it can
+  // resolve it by name at all. Lets the dashboard's containers panel
+  // offer a one-click fix for exactly the error a route to an
+  // unattached container produces. Idempotent; does not itself create or
+  // touch any route.
+  server_.Post(R"(/containers/([^/]+)/attach-network)",
+               [this](const httplib::Request& req, httplib::Response& res) {
+                 const std::string container_name = req.matches[1];
+                 if (!is_valid_container_name(container_name)) {
+                   send_error(res, 422, "not a valid docker container name");
+                   return;
+                 }
+
+                 std::string detail;
+                 bool ok = false;
+                 try {
+                   ok = docker_client_.connect_network(network_name_, container_name, &detail);
+                 } catch (const std::exception& e) {
+                   send_error(res, 502, std::format("failed to reach docker: {}", e.what()));
+                   return;
+                 }
+                 if (!ok) {
+                   send_error(res, 422,
+                              std::format("failed to attach '{}' to '{}': {}", container_name,
+                                          network_name_, detail));
+                   return;
+                 }
+                 res.set_content(json{{"container_name", container_name},
+                                       {"network_name", network_name_}}
+                                      .dump(),
+                                  "application/json");
+                 KP_LOG_INFO(kComponent, "attached container '{}' to network '{}'", container_name,
+                             network_name_);
+               });
+
   // A single aggregate endpoint for the web UI's initial load: the full
   // route table plus enough context (the reserved prefix, sync status) to
   // render a dashboard without several round trips.
