@@ -46,7 +46,13 @@ std::string ConfigGenerator::render(const std::vector<Route>& routes) {
             : route.path_prefix + "/";
     const std::string var_name = std::format("kp_upstream_{}", route.id);
 
-    out << std::format("location {} {{\n", location);
+    // "^~" ensures this prefix, once it's the longest matching one for a
+    // request, always wins over any regex (~ / ~*) location -- e.g. an
+    // asset-caching rule keyed on file extension in nginx.baseline.conf --
+    // regardless of that regex appearing earlier or being "more specific".
+    // Otherwise a proxied app serving its own *.js/*.css could have those
+    // requests silently swallowed by such a rule instead of forwarded.
+    out << std::format("location ^~ {} {{\n", location);
     // Assigning the upstream to a variable (rather than a literal in
     // proxy_pass) forces nginx to resolve the container name via the
     // `resolver` directive on every request instead of caching the IP from

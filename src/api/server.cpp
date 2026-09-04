@@ -84,6 +84,25 @@ void ApiServer::setup_routes() {
                      "application/json");
   });
 
+  // A single aggregate endpoint for the web UI's initial load: the full
+  // route table plus enough context (the reserved prefix, sync status) to
+  // render a dashboard without several round trips.
+  server_.Get("/config", [this](const httplib::Request&, httplib::Response& res) {
+    const auto status = sync_worker_.status();
+    json routes = json::array();
+    for (const auto& route : database_.list_routes()) routes.push_back(route_to_json(route));
+
+    res.set_content(json{{"routes", routes},
+                          {"reserved_path_prefix", std::string(kReservedPathPrefix)},
+                          {"sync",
+                           {{"last_sync_ok", status.last_sync_ok},
+                            {"last_error", status.last_error},
+                            {"last_sync_at", status.last_sync_at},
+                            {"sync_count", status.sync_count}}}}
+                         .dump(),
+                     "application/json");
+  });
+
   server_.Get("/routes", [this](const httplib::Request&, httplib::Response& res) {
     json routes = json::array();
     for (const auto& route : database_.list_routes()) routes.push_back(route_to_json(route));
@@ -181,14 +200,85 @@ void ApiServer::setup_routes() {
       send_error(res, 400, "request body must be valid JSON");
       return;
     }
-    if (!body.contains("enabled") || !body["enabled"].is_boolean()) {
-      send_error(res, 422, "request body must contain a boolean 'enabled' field");
+    if (body.contains("path_prefix")) {
+      send_error(res, 422,
+                 "path_prefix can't be changed; delete this route and create a new one instead");
       return;
     }
 
-    database_.set_enabled(id, body["enabled"].get<bool>());
+    RouteUpdate patch;
+    std::optional<std::string> new_container_name;
+
+    if (body.contains("container_name")) {
+      if (!body["container_name"].is_string() ||
+          !is_valid_container_name(body["container_name"].get<std::string>())) {
+        send_error(res, 422, "container_name is not a valid docker container name");
+        return;
+      }
+      new_container_name = body["container_name"].get<std::string>();
+      patch.container_name = new_container_name;
+    }
+    if (body.contains("container_port")) {
+      if (!body["container_port"].is_number_integer() ||
+          !is_valid_port(body["container_port"].get<int>())) {
+        send_error(res, 422, "container_port must be between 1 and 65535");
+        return;
+      }
+      patch.container_port = body["container_port"].get<int>();
+    }
+    if (body.contains("strip_prefix")) {
+      if (!body["strip_prefix"].is_boolean()) {
+        send_error(res, 422, "strip_prefix must be a boolean");
+        return;
+      }
+      patch.strip_prefix = body["strip_prefix"].get<bool>();
+    }
+    if (body.contains("enabled")) {
+      if (!body["enabled"].is_boolean()) {
+        send_error(res, 422, "enabled must be a boolean");
+        return;
+      }
+      patch.enabled = body["enabled"].get<bool>();
+    }
+    if (!patch.container_name && !patch.container_port && !patch.strip_prefix && !patch.enabled) {
+      send_error(res, 422,
+                 "request body must set at least one of: container_name, container_port, "
+                 "strip_prefix, enabled");
+      return;
+    }
+
+    // Re-validate against Docker and refresh last_seen_ip only when the
+    // target container is actually changing -- an unrelated field update
+    // (e.g. just toggling `enabled`) shouldn't require the old
+    // container_name to still exist.
+    bool warn_not_running = false;
+    if (new_container_name) {
+      std::optional<ContainerInfo> container;
+      try {
+        container = docker_client_.inspect_container(*new_container_name);
+      } catch (const std::exception& e) {
+        send_error(res, 502, std::format("failed to reach docker: {}", e.what()));
+        return;
+      }
+      if (!container) {
+        send_error(res, 422,
+                   std::format("no container named '{}' was found", *new_container_name));
+        return;
+      }
+      patch.last_seen_ip = container->primary_ip;
+      warn_not_running = !container->running;
+    }
+
+    const auto updated = database_.update_route(id, patch);
     sync_worker_.trigger();
-    res.set_content(route_to_json(*database_.get_route(id)).dump(), "application/json");
+
+    json response = route_to_json(*updated);
+    if (warn_not_running) {
+      response["warning"] =
+          "container is not currently running; the route will start working once it is";
+    }
+    res.set_content(response.dump(), "application/json");
+    KP_LOG_INFO(kComponent, "updated route {}", id);
   });
 
   server_.Delete(R"(/routes/(\d+))", [this](const httplib::Request& req, httplib::Response& res) {

@@ -194,6 +194,35 @@ std::optional<Route> Database::find_by_path_prefix(const std::string& path_prefi
   return row_to_route(select);
 }
 
+std::optional<Route> Database::update_route(int64_t id, const RouteUpdate& patch) {
+  std::scoped_lock lock(mutex_);
+
+  // Read-modify-write under a single lock acquisition: reuses raw Stmt
+  // objects rather than the public get_route()/etc. accessors, since those
+  // take this same (non-recursive) mutex themselves and would deadlock.
+  Stmt select(db_, std::format("SELECT {} FROM routes WHERE id = ?;", kSelectColumns).c_str());
+  select.bind(1, id);
+  if (!select.step()) return std::nullopt;
+  const Route current = row_to_route(select);
+
+  Stmt update(db_,
+              "UPDATE routes SET container_name = ?, container_port = ?, strip_prefix = ?, "
+              "enabled = ?, last_seen_ip = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') "
+              "WHERE id = ?;");
+  update.bind(1, patch.container_name.value_or(current.container_name));
+  update.bind(2, patch.container_port.value_or(current.container_port));
+  update.bind(3, patch.strip_prefix.value_or(current.strip_prefix) ? 1 : 0);
+  update.bind(4, patch.enabled.value_or(current.enabled) ? 1 : 0);
+  update.bind(5, patch.last_seen_ip.value_or(current.last_seen_ip));
+  update.bind(6, id);
+  update.step();
+
+  Stmt reselect(db_, std::format("SELECT {} FROM routes WHERE id = ?;", kSelectColumns).c_str());
+  reselect.bind(1, id);
+  reselect.step();
+  return row_to_route(reselect);
+}
+
 bool Database::set_enabled(int64_t id, bool enabled) {
   std::scoped_lock lock(mutex_);
   Stmt update(db_,

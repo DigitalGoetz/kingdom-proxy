@@ -1,6 +1,21 @@
+# syntax=docker/dockerfile:1
+
+# ---- web build stage ------------------------------------------------------
+# The React dashboard, built to static assets and served from nginx's
+# document root -- see the `location /` block in nginx.baseline.conf.
+FROM node:22-alpine AS web-build
+
+WORKDIR /web
+COPY web/package.json web/package-lock.json ./
+RUN npm ci
+COPY web/ ./
+RUN npm run build
+
+# ---- runtime stage ----------------------------------------------------
 FROM nginx:1.27-alpine
 
 COPY nginx/nginx.baseline.conf /etc/nginx/nginx.conf
+COPY --from=web-build /web/dist /usr/share/nginx/html
 
 # kingdom-routes.conf is `include`d by nginx.conf and must exist (even
 # empty) before nginx's first start -- kingdom-proxy-api overwrites it

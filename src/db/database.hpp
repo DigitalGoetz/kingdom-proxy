@@ -31,6 +31,11 @@ class Database {
   std::optional<Route> get_route(int64_t id) const;
   std::optional<Route> find_by_path_prefix(const std::string& path_prefix) const;
 
+  // Applies `patch` to the route's mutable fields (everything but id,
+  // path_prefix, created_at) and returns the updated row. std::nullopt if
+  // no route with that id exists.
+  std::optional<Route> update_route(int64_t id, const RouteUpdate& patch);
+
   // Returns false if no route with that id exists.
   bool set_enabled(int64_t id, bool enabled);
   bool delete_route(int64_t id);

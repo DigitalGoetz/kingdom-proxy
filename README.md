@@ -1,24 +1,30 @@
 # kingdom-proxy
 
 A programmable reverse proxy for routing to locally running Docker
-containers by path, built as two cooperating pieces:
+containers by path, built as three cooperating pieces:
 
 - **nginx** — does the actual proxying. Runs with a small static baseline
-  config plus one generated file that holds all dynamic routes.
+  config plus one generated file that holds all dynamic routes, and also
+  serves the web dashboard's static files from its document root.
 - **kingdom-proxy-api** (Modern C++20) — an orchestration/admin service
   sitting behind nginx. It exposes an HTTP API for registering routes,
   persists them in SQLite, and keeps nginx's generated config in sync with
   the database in the background.
+- **web** (React + TypeScript) — a small dashboard for seeing what routes
+  exist and creating/editing/deleting them, served at nginx's `/` and
+  talking to the admin API at `/_proxy/*` on the same origin.
 
 ```
                      ┌─────────────────────────┐
-   client ────────▶  │  nginx  (:4800 → :80)    │ ──▶ any container on
+   browser/curl ──▶  │  nginx  (:4800 → :80)    │ ──▶ any container on
                      │  baseline + generated    │     kingdom-net, by
                      │  config, path routing    │     path prefix
                      └────────────┬─────────────┘
-                                  │ /_proxy/*  → stripped, proxied to the
-                                  │              api container (baseline
-                                  │              route -- see below)
+                                  │ /            → the React dashboard
+                                  │                (static files, this image)
+                                  │ /_proxy/*    → stripped, proxied to the
+                                  │                api container (baseline
+                                  │                route -- see below)
                                   │ everything else → dynamic routes
                                   │
                                   │ docker exec (nginx -t / -s reload)
@@ -108,6 +114,23 @@ to `false` to forward `/myapp/foo` unchanged.
 
 Traffic now flows: `curl http://localhost:4800/myapp/`
 
+## Web dashboard
+
+Open `http://localhost:4800/` — nginx serves the built React app from its
+document root. It lists current routes (enabled and disabled), lets you
+create a new one, edit a route's target/port/strip-prefix in place, toggle
+it enabled/disabled, or delete it, and shows the background sync worker's
+status. It talks to the admin API at `/_proxy/*` on the same origin, so
+there's no separate host/port to configure and nothing extra to expose.
+
+For local UI development against a running stack:
+
+```sh
+cd web
+npm install
+npm run dev   # proxies /_proxy/* to http://localhost:4800, see vite.config.ts
+```
+
 ## Admin API
 
 Reachable two ways — through the proxy at `<nginx-host>/_proxy/<path>`
@@ -119,15 +142,19 @@ the API's own, with the `/_proxy` prefix already stripped.
 |--------|----------------|------------------------------------------------|
 | GET    | `/healthz`     | Liveness check.                                |
 | GET    | `/status`      | Last sync result, timestamp, route count.      |
+| GET    | `/config`      | Everything the web dashboard needs in one call: all routes, `reserved_path_prefix`, and sync status. |
 | GET    | `/routes`      | List all routes.                               |
 | POST   | `/routes`      | Create a route (see body above).               |
 | GET    | `/routes/{id}` | Fetch one route.                               |
-| PATCH  | `/routes/{id}` | `{"enabled": false}` — disable without deleting.|
+| PATCH  | `/routes/{id}` | Partial update — any of `container_name`, `container_port`, `strip_prefix`, `enabled`. `path_prefix` can't be changed (`422`); delete and recreate instead. |
 | DELETE | `/routes/{id}` | Remove a route.                                |
 
 `path_prefix` values of `/_proxy` or anything under it are rejected
 (`422`) when creating a route — that prefix is reserved for the admin API
-itself so a route can never shadow it.
+itself so a route can never shadow it. A `PATCH` that changes
+`container_name` re-validates the new container against Docker (same as
+`POST`) and refreshes `last_seen_ip`; changing only `enabled` or
+`strip_prefix` does not.
 
 Every write triggers an immediate background sync (`nginx -t` + reload);
 `GET /status` reports whether the last sync succeeded and, if not, what
@@ -146,6 +173,8 @@ src/
   worker/    background sync worker (DB -> nginx config -> reload)
   main.cpp   wiring + config from environment variables
 nginx/       static baseline nginx.conf
+web/         React + TypeScript dashboard (built into the nginx image by
+             Dockerfile.nginx's web-build stage; see web/src/App.tsx)
 tests/       Catch2 unit tests (config rendering, database)
 ```
 
@@ -186,9 +215,13 @@ KP_NGINX_CONF_PATH=/tmp/kingdom-routes.conf \
 
 ## Security notes
 
-- The admin API has no authentication — it is bound to `127.0.0.1` by
-  `docker-compose.yml` on purpose. Don't expose it without adding auth in
-  front of it (e.g. a sidecar, an authenticating reverse proxy, or a VPN).
+- The admin API has no authentication, and now neither does the web
+  dashboard that drives it. Its own loopback-only port (`4810`) was
+  already unauthenticated by design, but wiring it up at `/_proxy/*` on
+  nginx's port means full route management (create/edit/delete) is also
+  reachable from wherever nginx's port (`4800`) itself is reachable. Don't
+  expose that port beyond a trusted network without adding auth in front
+  of it (e.g. a sidecar, an authenticating reverse proxy, or a VPN).
 - The api container is mounted the host's Docker socket read-only and runs
   as root, which is effectively equivalent to root on the host — the same
   trust tradeoff as any tool that talks to `docker.sock` (Traefik's docker

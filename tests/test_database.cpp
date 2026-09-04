@@ -67,6 +67,48 @@ TEST_CASE("list_enabled_routes excludes disabled routes", "[database]") {
   CHECK(all.size() == 2);
 }
 
+TEST_CASE("update_route applies only the given fields, leaving the rest untouched", "[database]") {
+  Database db(temp_db_path());
+  const auto created = db.create_route(make_new_route("/svc", "old-app", 8080), "10.0.0.1");
+
+  kp::RouteUpdate patch;
+  patch.container_port = 9090;
+  const auto updated = db.update_route(created.id, patch);
+
+  REQUIRE(updated.has_value());
+  CHECK(updated->container_port == 9090);
+  // Untouched fields keep their prior values.
+  CHECK(updated->container_name == "old-app");
+  CHECK(updated->path_prefix == "/svc");
+  CHECK(updated->strip_prefix == created.strip_prefix);
+  CHECK(updated->enabled == created.enabled);
+  CHECK(updated->last_seen_ip == "10.0.0.1");
+}
+
+TEST_CASE("update_route can change multiple fields including last_seen_ip", "[database]") {
+  Database db(temp_db_path());
+  const auto created = db.create_route(make_new_route("/svc", "old-app", 8080), "10.0.0.1");
+
+  kp::RouteUpdate patch;
+  patch.container_name = "new-app";
+  patch.last_seen_ip = "10.0.0.2";
+  patch.enabled = false;
+  const auto updated = db.update_route(created.id, patch);
+
+  REQUIRE(updated.has_value());
+  CHECK(updated->container_name == "new-app");
+  CHECK(updated->last_seen_ip == "10.0.0.2");
+  CHECK_FALSE(updated->enabled);
+  CHECK(updated->container_port == 8080);  // untouched
+}
+
+TEST_CASE("update_route on a nonexistent id returns nullopt", "[database]") {
+  Database db(temp_db_path());
+  kp::RouteUpdate patch;
+  patch.enabled = false;
+  CHECK_FALSE(db.update_route(999999, patch).has_value());
+}
+
 TEST_CASE("find_by_path_prefix and get_route", "[database]") {
   Database db(temp_db_path());
   const auto created = db.create_route(make_new_route("/lookup"), "");

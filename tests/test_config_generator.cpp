@@ -32,7 +32,7 @@ TEST_CASE("strip_prefix=true rewrites the URI before proxy_pass", "[config_gener
   // nothing and mislead a reader into thinking it strips the prefix).
   const auto rendered = ConfigGenerator::render({make_route(1, "/widgets", "widgets-app", 8080)});
 
-  CHECK(rendered.find("location /widgets/ {") != std::string::npos);
+  CHECK(rendered.find("location ^~ /widgets/ {") != std::string::npos);
   const auto set_pos = rendered.find("set $kp_upstream_1 \"http://widgets-app:8080\";");
   const auto rewrite_pos = rendered.find("rewrite ^/widgets/(.*)$ /$1 break;");
   const auto proxy_pass_pos = rendered.find("proxy_pass $kp_upstream_1;\n");

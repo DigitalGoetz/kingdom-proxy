@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <string>
 
 namespace kp {
@@ -33,6 +34,18 @@ struct NewRoute {
   std::string container_name;
   int container_port = 0;
   bool strip_prefix = true;
+};
+
+// A partial update to an existing route. path_prefix is deliberately not
+// editable here -- it's the route's identity; changing a target's path is
+// modeled as delete + create instead of an in-place rename. Any field left
+// as std::nullopt keeps the route's current value.
+struct RouteUpdate {
+  std::optional<std::string> container_name;
+  std::optional<int> container_port;
+  std::optional<bool> strip_prefix;
+  std::optional<bool> enabled;
+  std::optional<std::string> last_seen_ip;  // Refreshed by the API when container_name changes.
 };
 
 }  // namespace kp
