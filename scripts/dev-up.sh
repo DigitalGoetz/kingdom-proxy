@@ -20,25 +20,28 @@ done
 cat <<'EOF'
 
 kingdom-proxy is up:
-  proxy:     http://localhost:4800
-  admin API: http://localhost:4810
+  proxy:     http://localhost:4800  (admin API also at /_proxy/* on this port)
+  admin API: http://localhost:4810  (direct, loopback-only)
 
-Try it out:
+Try it out, entirely through the proxy:
   # Attach some container to the shared network so nginx and the api can
   # both reach it by name:
   docker network connect kingdom-net <your-container>
 
   # Register a route (path prefix -> container:port):
-  curl -X POST http://localhost:4810/routes \
+  curl -X POST http://localhost:4800/_proxy/routes \
     -H 'content-type: application/json' \
     -d '{"path_prefix":"/myapp","container_name":"<your-container>","container_port":8080}'
 
   # List routes:
-  curl http://localhost:4810/routes
+  curl http://localhost:4800/_proxy/routes
 
   # Traffic now flows:
   curl http://localhost:4800/myapp/
 
   # Check sync status:
-  curl http://localhost:4810/status
+  curl http://localhost:4800/_proxy/status
+
+(swap "http://localhost:4800/_proxy" for "http://localhost:4810" in any of
+the above to hit the admin API directly instead, bypassing nginx.)
 EOF

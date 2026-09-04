@@ -29,6 +29,17 @@ bool is_valid_container_name(const std::string& value) {
 
 bool is_valid_port(int port) { return port > 0 && port <= 65535; }
 
+// "/_proxy" is wired up in nginx.baseline.conf as a static route straight
+// to kingdom-proxy-api itself, so the admin API is reachable through the
+// same front door as everything else. Routes can't be registered under it,
+// so a dynamic route can never shadow the admin API.
+constexpr std::string_view kReservedPathPrefix = "/_proxy";
+
+bool is_reserved_path_prefix(const std::string& value) {
+  return value == kReservedPathPrefix ||
+         value.starts_with(std::string(kReservedPathPrefix) + "/");
+}
+
 json route_to_json(const Route& route) {
   return json{
       {"id", route.id},
@@ -108,6 +119,12 @@ void ApiServer::setup_routes() {
       send_error(res, 422,
                  "path_prefix must start with '/' and contain only letters, digits, '.', '_', "
                  "'-' and '/' (no trailing slash, no repeated slashes)");
+      return;
+    }
+    if (is_reserved_path_prefix(new_route.path_prefix)) {
+      send_error(res, 422,
+                 std::format("path_prefix '{}' is reserved for the admin API itself",
+                             kReservedPathPrefix));
       return;
     }
     if (!is_valid_container_name(new_route.container_name)) {

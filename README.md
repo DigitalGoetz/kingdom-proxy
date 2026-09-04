@@ -14,20 +14,32 @@ containers by path, built as two cooperating pieces:
                      ┌─────────────────────────┐
    client ────────▶  │  nginx  (:4800 → :80)    │ ──▶ any container on
                      │  baseline + generated    │     kingdom-net, by
-                     │  config, path routing     │     path prefix
+                     │  config, path routing    │     path prefix
                      └────────────┬─────────────┘
+                                  │ /_proxy/*  → stripped, proxied to the
+                                  │              api container (baseline
+                                  │              route -- see below)
+                                  │ everything else → dynamic routes
+                                  │
                                   │ docker exec (nginx -t / -s reload)
                                   │ shared volume (conf.d)
                      ┌────────────▼─────────────┐
-   admin ─────────▶  │  kingdom-proxy-api (:4810)│
-   (curl/scripts)    │  HTTP API → SQLite         │
-                     │  background sync worker    │
+   admin ─────────▶  │  kingdom-proxy-api (:4810)│  (also reachable directly,
+   (curl/scripts)    │  HTTP API → SQLite        │   loopback-only, for local
+                     │  background sync worker   │   debugging)
                      └────────────┬─────────────┘
                                   │ Docker Engine API (unix socket)
                                   ▼
                        validates target containers,
                        triggers nginx reload
 ```
+
+The admin API is reachable two ways: through the proxy at `/_proxy/*` on
+nginx's port (e.g. `http://localhost:4800/_proxy/routes`), which is how
+everything else reaches it too, and directly on its own loopback-only port
+(`http://localhost:4810/routes`) for local debugging. `/_proxy` is a
+reserved path prefix — the API refuses to let a dynamic route register
+under it, so a route can never shadow the admin API itself.
 
 ## How a route gets applied
 
@@ -74,10 +86,10 @@ Any container you want to route to must be attached to `kingdom-net` too:
 docker network connect kingdom-net <your-container>
 ```
 
-Then register a route:
+Then register a route, through the proxy itself:
 
 ```sh
-curl -X POST http://localhost:4810/routes \
+curl -X POST http://localhost:4800/_proxy/routes \
   -H 'content-type: application/json' \
   -d '{
         "path_prefix": "/myapp",
@@ -87,6 +99,9 @@ curl -X POST http://localhost:4810/routes \
       }'
 ```
 
+(or the same call against `http://localhost:4810/routes` directly, bypassing
+nginx — see [Admin API](#admin-api).)
+
 `strip_prefix: true` (the default) means a request to
 `http://localhost:4800/myapp/foo` reaches the container as `/foo`; set it
 to `false` to forward `/myapp/foo` unchanged.
@@ -94,6 +109,11 @@ to `false` to forward `/myapp/foo` unchanged.
 Traffic now flows: `curl http://localhost:4800/myapp/`
 
 ## Admin API
+
+Reachable two ways — through the proxy at `<nginx-host>/_proxy/<path>`
+(e.g. `http://localhost:4800/_proxy/routes`), or directly on its own
+loopback-only port (e.g. `http://localhost:4810/routes`). Paths below are
+the API's own, with the `/_proxy` prefix already stripped.
 
 | Method | Path           | Description                                   |
 |--------|----------------|------------------------------------------------|
@@ -104,6 +124,10 @@ Traffic now flows: `curl http://localhost:4800/myapp/`
 | GET    | `/routes/{id}` | Fetch one route.                               |
 | PATCH  | `/routes/{id}` | `{"enabled": false}` — disable without deleting.|
 | DELETE | `/routes/{id}` | Remove a route.                                |
+
+`path_prefix` values of `/_proxy` or anything under it are rejected
+(`422`) when creating a route — that prefix is reserved for the admin API
+itself so a route can never shadow it.
 
 Every write triggers an immediate background sync (`nginx -t` + reload);
 `GET /status` reports whether the last sync succeeded and, if not, what

@@ -11,6 +11,20 @@
 namespace kp {
 namespace {
 constexpr std::string_view kComponent = "config_generator";
+
+// path_prefix is restricted (see is_valid_path_prefix in api/server.cpp) to
+// [A-Za-z0-9._-] plus '/', and of those only '.' is an nginx regex
+// metacharacter (matches any character) -- it's escaped here since
+// path_prefix gets embedded in a `rewrite` regex below.
+std::string escape_rewrite_regex(const std::string& path_prefix) {
+  std::string escaped;
+  escaped.reserve(path_prefix.size());
+  for (char c : path_prefix) {
+    if (c == '.') escaped += '\\';
+    escaped += c;
+  }
+  return escaped;
+}
 }  // namespace
 
 ConfigGenerator::ConfigGenerator(std::string output_path) : output_path_(std::move(output_path)) {}
@@ -37,14 +51,30 @@ std::string ConfigGenerator::render(const std::vector<Route>& routes) {
     // proxy_pass) forces nginx to resolve the container name via the
     // `resolver` directive on every request instead of caching the IP from
     // when this config was loaded -- see nginx.baseline.conf. That's what
-    // lets a route survive the target container being restarted.
+    // lets a route survive the target container being restarted. This must
+    // come *before* the `rewrite ... break` below: `break` stops the
+    // rewrite module (which is also what implements `set`) from running
+    // any of its own directives that follow it in the same location, so a
+    // `set` placed after a `break` would silently never execute, leaving
+    // the variable uninitialized and the request failing with a 500.
     out << std::format("    set ${} \"http://{}:{}\";\n", var_name, route.container_name,
                         route.container_port);
-    // A trailing slash on proxy_pass replaces the matched location prefix
-    // with "/" (i.e. strips it); omitting it forwards the original URI
-    // unchanged, prefix included.
-    out << (route.strip_prefix ? std::format("    proxy_pass ${}/;\n", var_name)
-                                : std::format("    proxy_pass ${};\n", var_name));
+    if (route.strip_prefix) {
+      // nginx has a documented special case: when proxy_pass's value
+      // contains a variable, the URI part it's known for at config-parse
+      // time is irrelevant -- nginx *always* forwards the original request
+      // URI unchanged, prefix included, no matter what follows the
+      // variable (a trailing "/" there is silently ignored). Since a
+      // variable is required here to get per-request DNS resolution,
+      // prefix stripping has to happen separately, via `rewrite ... break`,
+      // before proxy_pass ever sees the URI.
+      // https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_pass
+      out << std::format("    rewrite ^{}/(.*)$ /$1 break;\n", escape_rewrite_regex(route.path_prefix));
+    }
+    // No URI part after the variable: nginx forwards whatever the current
+    // request URI is -- the original one, or the one `rewrite` produced
+    // above -- to the upstream unchanged.
+    out << std::format("    proxy_pass ${};\n", var_name);
     out << "    proxy_http_version 1.1;\n"
            "    proxy_set_header Host $host;\n"
            "    proxy_set_header X-Real-IP $remote_addr;\n"
