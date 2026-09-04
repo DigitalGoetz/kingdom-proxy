@@ -67,16 +67,27 @@ under it, so a route can never shadow the admin API itself.
    net, and once at startup, so it self-heals from a missed trigger.
 
 Routes are generated to reference their target by **container name**, not
-a cached IP. nginx is configured to use Docker's embedded DNS resolver
-(`127.0.0.11`) and to resolve the upstream through an nginx variable, which
-forces re-resolution on every request — so a route keeps working across a
-`docker restart` of its target container without needing a new sync.
+a cached IP. nginx is configured to use the container runtime's embedded
+DNS resolver (auto-detected at startup -- see
+[Running under Podman](#running-under-podman)) and to resolve the upstream
+through an nginx variable, which forces re-resolution on every request —
+so a route keeps working across a restart of its target container without
+needing a new sync.
+
+Visiting a route at its bare prefix with no trailing slash (e.g.
+`/myapp` rather than `/myapp/` — the natural way to type a URL) redirects
+to the slash-terminated form automatically, with the query string and the
+actual port you connected on both preserved.
 
 ## Quick start
 
 ```sh
 ./scripts/dev-up.sh
 ```
+
+(or `./scripts/demo-up.sh`, which also brings up and routes the
+[example app](#example-app) — the fastest way to see the whole thing
+working end to end.)
 
 or manually:
 
@@ -195,6 +206,40 @@ npm install
 npm run dev   # proxies /_proxy/* to http://localhost:4800, see vite.config.ts
 ```
 
+## Example app
+
+`examples/todo-app/` is a minimal service to try routing with: a to-do
+list, API and UI in one container, using nothing but Node's built-in
+`http` module (no `npm install` needed — see its own `server.js`). It's
+not part of the core stack; bring it up with:
+
+```sh
+./scripts/demo-up.sh
+```
+
+which starts kingdom-proxy (if it isn't already up), builds and starts
+the demo app on `kingdom-net`, and registers a route for it at `/demo` —
+then open `http://localhost:4800/demo/`. Tear it down again with
+`docker compose --profile demo down`.
+
+Doing this by hand instead, the same way you'd route any of your own
+containers, looks like:
+
+```sh
+docker compose --profile demo up -d --build demo
+curl -X POST http://localhost:4800/_proxy/routes \
+  -H 'content-type: application/json' \
+  -d '{"path_prefix":"/demo","container_name":"kingdom-demo-todo-app","container_port":8080}'
+```
+
+The one thing worth noting if you're adapting this for your own app: its
+UI fetches its API with a *relative* path (`api/todos`, not `/api/todos`).
+A leading-slash path resolves against the origin root regardless of the
+page's own URL, ignoring whatever prefix kingdom-proxy mounted it at; a
+relative one resolves against the current page, so it keeps working no
+matter what prefix a route uses. See the comment at the top of
+`examples/todo-app/server.js` for more.
+
 ## Admin API
 
 Reachable two ways — through the proxy at `<nginx-host>/_proxy/<path>`
@@ -239,6 +284,7 @@ src/
 nginx/       static baseline nginx.conf
 web/         React + TypeScript dashboard (built into the nginx image by
              Dockerfile.nginx's web-build stage; see web/src/App.tsx)
+examples/    Example app(s) to try routing with -- see todo-app/
 tests/       Catch2 unit tests (config rendering, database)
 ```
 

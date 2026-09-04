@@ -65,6 +65,23 @@ TEST_CASE("a '.' in path_prefix is escaped in the rewrite regex", "[config_gener
   CHECK(rendered.find("rewrite ^/v1\\.2/(.*)$ /$1 break;") != std::string::npos);
 }
 
+TEST_CASE("bare path_prefix (no trailing slash) redirects to the slash-terminated form",
+          "[config_generator]") {
+  // Regression test: nginx *does* generate a redirect like this
+  // automatically for any location ending in "/" whose content is
+  // proxy_pass -- but it builds the Location header from nginx's own
+  // listen port, not whatever port the client actually connected to, so
+  // behind a port remapping (this project's own 4800->80, say) it sends
+  // browsers to the wrong port. This explicit exact-match redirect (which
+  // always wins over any prefix location, automatic or not) has to use
+  // $http_host -- the client's own Host header, verbatim -- instead.
+  const auto rendered = ConfigGenerator::render({make_route(1, "/widgets", "widgets-app", 8080)});
+
+  CHECK(rendered.find(
+            "location = /widgets {\n    return 301 $scheme://$http_host/widgets/$is_args$args;\n}") !=
+        std::string::npos);
+}
+
 TEST_CASE("disabled routes are omitted", "[config_generator]") {
   const auto rendered = ConfigGenerator::render(
       {make_route(3, "/off", "off-app", 80, /*strip_prefix=*/true, /*enabled=*/false)});

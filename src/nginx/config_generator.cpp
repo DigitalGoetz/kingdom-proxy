@@ -46,6 +46,22 @@ std::string ConfigGenerator::render(const std::vector<Route>& routes) {
             : route.path_prefix + "/";
     const std::string var_name = std::format("kp_upstream_{}", route.id);
 
+    // A bare request for the prefix with no trailing slash (e.g. someone
+    // types /demo into a browser rather than /demo/) needs an explicit
+    // redirect to the slash-terminated form below: nginx *does* generate
+    // one automatically for any location ending in "/" whose content is
+    // proxy_pass/fastcgi_pass/etc, but that automatic one builds the
+    // Location header from nginx's own listen port, not whatever
+    // port the client actually connected to -- so behind a port
+    // remapping (this container's own docker-compose.yml maps host
+    // 4800 to this container's port 80, e.g.) it sends browsers to the
+    // wrong port entirely. Overriding it with our own exact-match
+    // location (which always wins over any prefix location, automatic
+    // or not) and building the target from $http_host -- the client's
+    // own Host header, verbatim -- fixes that.
+    out << std::format("location = {} {{\n    return 301 $scheme://$http_host{}$is_args$args;\n}}\n\n",
+                        route.path_prefix, location);
+
     // "^~" ensures this prefix, once it's the longest matching one for a
     // request, always wins over any regex (~ / ~*) location -- e.g. an
     // asset-caching rule keyed on file extension in nginx.baseline.conf --

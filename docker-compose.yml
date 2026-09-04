@@ -55,6 +55,22 @@ services:
       - nginx
     restart: unless-stopped
 
+  # An example service to route through kingdom-proxy: a tiny to-do app,
+  # API + UI in one container (see examples/todo-app). Opt-in via the
+  # "demo" profile so a plain `docker compose up` doesn't start it:
+  #   docker compose --profile demo up -d --build
+  # or use scripts/demo-up.sh, which also registers a route for it.
+  # Not published on any host port -- it's meant to be reached only
+  # through the proxy, same as any real app would be.
+  demo:
+    profiles: ["demo"]
+    build:
+      context: examples/todo-app
+    container_name: kingdom-demo-todo-app
+    networks:
+      - kingdom-net
+    restart: unless-stopped
+
 networks:
   # Containers you want to route to must be attached to this network so
   # both nginx (which connects to them by name) and the api container
