@@ -1,0 +1,49 @@
+#pragma once
+
+#include <optional>
+#include <string>
+#include <vector>
+
+namespace kp {
+
+struct ContainerInfo {
+  std::string id;
+  std::string name;
+  bool running = false;
+  std::string primary_ip;            // Best-effort: first attached network's IP.
+  std::vector<std::string> networks;  // Names of docker networks the container is on.
+};
+
+// Talks to the Docker Engine API over the local unix socket. Used for two
+// things: (1) validating a route's target container exists, is running, and
+// is reachable before we persist the route, and (2) triggering an in-place
+// `nginx -s reload` inside the nginx container via `docker exec`, since the
+// nginx process runs in a separate container from this one.
+class DockerClient {
+ public:
+  explicit DockerClient(std::string socket_path = "/var/run/docker.sock");
+
+  // Returns std::nullopt if no such container exists.
+  std::optional<ContainerInfo> inspect_container(const std::string& name_or_id) const;
+
+  // Runs `nginx -t` inside the target container to validate the freshly
+  // generated config, and only reloads if that check passes. Returns true
+  // if the config validated and the reload succeeded; on failure, `detail`
+  // (if non-null) is filled with whatever nginx printed to help debugging.
+  bool reload_nginx(const std::string& container_name, std::string* detail = nullptr) const;
+
+ private:
+  struct ExecResult {
+    bool ok = false;
+    int exit_code = -1;
+    std::string output;
+  };
+
+  // Runs `cmd` inside `container_name` via the Docker exec API and waits
+  // for it to finish, capturing combined stdout/stderr.
+  ExecResult exec(const std::string& container_name, const std::vector<std::string>& cmd) const;
+
+  std::string socket_path_;
+};
+
+}  // namespace kp

@@ -1,0 +1,40 @@
+# syntax=docker/dockerfile:1
+
+# ---- build stage ------------------------------------------------------
+FROM ubuntu:24.04 AS build
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      build-essential cmake git ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+COPY CMakeLists.txt ./
+COPY cmake ./cmake
+COPY src ./src
+COPY tests ./tests
+
+# Tests aren't needed in the runtime image; skip fetching/building Catch2
+# during the container build to keep it lean and fast.
+RUN cmake -B build -DCMAKE_BUILD_TYPE=Release -DKINGDOM_PROXY_BUILD_TESTS=OFF && \
+    cmake --build build --target kingdom-proxy-api -j"$(nproc)"
+
+# ---- runtime stage ------------------------------------------------------
+FROM ubuntu:24.04
+
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates wget \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=build /src/build/kingdom-proxy-api /usr/local/bin/kingdom-proxy-api
+
+# Runs as root: this container is bind-mounted the host's docker.sock at
+# runtime (see docker-compose.yml) so it can inspect containers and exec
+# into the nginx container, which in practice requires root or the
+# socket's owning group. That's the same trust tradeoff any docker-socket-
+# mounting tool (docker-proxy, watchtower, etc.) makes -- treat this
+# container as privileged and don't expose its admin API publicly.
+VOLUME ["/data"]
+EXPOSE 9000
+
+HEALTHCHECK --interval=10s --timeout=3s CMD wget -qO- http://127.0.0.1:9000/healthz || exit 1
+
+ENTRYPOINT ["/usr/local/bin/kingdom-proxy-api"]

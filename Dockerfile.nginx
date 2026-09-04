@@ -1,0 +1,15 @@
+FROM nginx:1.27-alpine
+
+COPY nginx/nginx.baseline.conf /etc/nginx/nginx.conf
+
+# kingdom-routes.conf is `include`d by nginx.conf and must exist (even
+# empty) before nginx's first start -- kingdom-proxy-api overwrites it
+# afterwards via the shared conf.d volume. The stock default.conf that
+# ships in the base image is removed since nginx.baseline.conf doesn't
+# include conf.d/*.conf wholesale (it only includes kingdom-routes.conf
+# explicitly) -- it would otherwise sit there unused but confusing.
+RUN rm -f /etc/nginx/conf.d/default.conf && \
+    mkdir -p /etc/nginx/conf.d && \
+    touch /etc/nginx/conf.d/kingdom-routes.conf
+
+HEALTHCHECK --interval=10s --timeout=3s CMD wget -qO- http://127.0.0.1/healthz || exit 1

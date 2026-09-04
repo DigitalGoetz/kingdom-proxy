@@ -1,0 +1,56 @@
+services:
+  nginx:
+    build:
+      context: .
+      dockerfile: Dockerfile.nginx
+    container_name: kingdom-proxy-nginx
+    ports:
+      - "8080:80"
+    volumes:
+      # Named volume shared with `api`. Started first (see api's
+      # depends_on below) so this is the container that populates the
+      # volume from its image on first run -- including the empty
+      # kingdom-routes.conf that nginx.conf `include`s.
+      - nginx-conf:/etc/nginx/conf.d
+    networks:
+      - kingdom-net
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: kingdom-proxy-api
+    environment:
+      KP_HTTP_HOST: "0.0.0.0"
+      KP_HTTP_PORT: "9000"
+      KP_DB_PATH: "/data/kingdom-proxy.db"
+      KP_DOCKER_SOCKET: "/var/run/docker.sock"
+      KP_NGINX_CONF_PATH: "/etc/nginx/conf.d/kingdom-routes.conf"
+      KP_NGINX_CONTAINER_NAME: "kingdom-proxy-nginx"
+      KP_SYNC_INTERVAL_SECONDS: "30"
+    ports:
+      # Admin API stays on loopback by default -- it's unauthenticated.
+      # Widen this only if you know what you're doing.
+      - "127.0.0.1:9000:9000"
+    volumes:
+      - nginx-conf:/etc/nginx/conf.d
+      - api-data:/data
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - kingdom-net
+    depends_on:
+      - nginx
+    restart: unless-stopped
+
+networks:
+  # Containers you want to route to must be attached to this network so
+  # both nginx (which connects to them by name) and the api container
+  # (which inspects them) can reach them. Existing containers can join
+  # with: docker network connect kingdom-net <container>
+  kingdom-net:
+    name: kingdom-net
+
+volumes:
+  nginx-conf:
+  api-data:
