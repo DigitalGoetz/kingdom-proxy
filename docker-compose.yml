@@ -36,7 +36,19 @@ services:
     volumes:
       - nginx-conf:/etc/nginx/conf.d
       - api-data:/data
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Host-side path to the container engine's API socket. The default
+      # is Docker's; running under Podman instead, set CONTAINER_ENGINE_SOCKET
+      # before bringing the stack up -- e.g.
+      #   CONTAINER_ENGINE_SOCKET=/run/podman/podman.sock podman-compose up -d --build   # rootful
+      #   CONTAINER_ENGINE_SOCKET=$XDG_RUNTIME_DIR/podman/podman.sock podman-compose up -d --build   # rootless
+      # (the socket must first be enabled -- see README's Podman section).
+      # The container-internal path is unaffected: it's always
+      # /var/run/docker.sock in there, matching KP_DOCKER_SOCKET's default
+      # above, regardless of what the host side actually is.
+      # ":z" relabels the socket for SELinux (common on Podman's usual
+      # hosts, Fedora/RHEL/CentOS); it's a harmless no-op where SELinux
+      # isn't enforced, so this is left on unconditionally for both.
+      - ${CONTAINER_ENGINE_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock:ro,z
     networks:
       - kingdom-net
     depends_on:

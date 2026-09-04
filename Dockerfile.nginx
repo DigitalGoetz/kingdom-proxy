@@ -17,14 +17,29 @@ FROM nginx:1.27-alpine
 COPY nginx/nginx.baseline.conf /etc/nginx/nginx.conf
 COPY --from=web-build /web/dist /usr/share/nginx/html
 
+# Detects the container runtime's embedded DNS resolver at startup and
+# writes it to conf.d/resolver.conf -- see the script itself, and the
+# `resolver` include in nginx.baseline.conf, for why this can't just be a
+# hardcoded IP (Docker vs. Podman, and Podman varies per network). The
+# official nginx image runs every *.sh file under /docker-entrypoint.d/,
+# sorted by name, before starting nginx.
+COPY nginx/docker-entrypoint.d/40-kingdom-proxy-resolver.sh /docker-entrypoint.d/
+RUN chmod +x /docker-entrypoint.d/40-kingdom-proxy-resolver.sh
+
 # kingdom-routes.conf is `include`d by nginx.conf and must exist (even
 # empty) before nginx's first start -- kingdom-proxy-api overwrites it
-# afterwards via the shared conf.d volume. The stock default.conf that
-# ships in the base image is removed since nginx.baseline.conf doesn't
-# include conf.d/*.conf wholesale (it only includes kingdom-routes.conf
-# explicitly) -- it would otherwise sit there unused but confusing.
+# afterwards via the shared conf.d volume. resolver.conf, also `include`d,
+# gets the same empty placeholder for the same reason: it's only actually
+# written at container start (by the script above), but this directory is
+# also a volume shared with the api container, and an empty *named* volume
+# is seeded from whatever's already on this image the first time any
+# container mounts it -- so the placeholder has to exist at build time.
+# The stock default.conf that ships in the base image is removed since
+# nginx.baseline.conf doesn't include conf.d/*.conf wholesale (it only
+# includes specific files by name) -- it would otherwise sit there unused
+# but confusing.
 RUN rm -f /etc/nginx/conf.d/default.conf && \
     mkdir -p /etc/nginx/conf.d && \
-    touch /etc/nginx/conf.d/kingdom-routes.conf
+    touch /etc/nginx/conf.d/kingdom-routes.conf /etc/nginx/conf.d/resolver.conf
 
 HEALTHCHECK --interval=10s --timeout=3s CMD wget -qO- http://127.0.0.1/healthz || exit 1

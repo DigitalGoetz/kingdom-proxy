@@ -1,7 +1,9 @@
 # kingdom-proxy
 
-A programmable reverse proxy for routing to locally running Docker
-containers by path, built as three cooperating pieces:
+A programmable reverse proxy for routing to locally running containers by
+path — runs under Docker or Podman (see
+[Running under Podman](#running-under-podman)) — built as three cooperating
+pieces:
 
 - **nginx** — does the actual proxying. Runs with a small static baseline
   config plus one generated file that holds all dynamic routes, and also
@@ -113,6 +115,68 @@ nginx — see [Admin API](#admin-api).)
 to `false` to forward `/myapp/foo` unchanged.
 
 Traffic now flows: `curl http://localhost:4800/myapp/`
+
+## Running under Podman
+
+Everything above works under Podman instead of Docker, with a few
+adjustments. What makes this possible, and what doesn't need to change:
+
+- **The Docker Engine API calls kingdom-proxy-api makes** (container
+  inspect, `exec` create/start for nginx reload) go over
+  `KP_DOCKER_SOCKET`, an ordinary Unix socket -- Podman's API server
+  implements a Docker-compatible subset of that same API on its own
+  socket, by design, specifically so tools built against Docker's API
+  (this one included) work against it unmodified. No code differences
+  between the two.
+- **The embedded-DNS resolver nginx needs** (so a route survives its
+  target container restarting -- see
+  [How a route gets applied](#how-a-route-gets-applied)) is *not* the same
+  fixed address under Podman as it is under Docker, and even varies by
+  network under Podman. This image detects it at container start rather
+  than hardcoding it -- see
+  `nginx/docker-entrypoint.d/40-kingdom-proxy-resolver.sh` -- specifically
+  so this works under either runtime.
+- **`docker-compose.yml` itself** doesn't need to change -- `podman-compose`
+  or Podman's own `podman compose` can run it directly. The one thing that
+  does need to change is telling the `api` service where Podman's socket
+  actually is (see below), since that path isn't `/var/run/docker.sock`.
+
+Setup:
+
+1. Enable Podman's API socket (skip if it's already running):
+   ```sh
+   systemctl --user enable --now podman.socket   # rootless (typical)
+   # or, for a rootful setup:
+   sudo systemctl enable --now podman.socket
+   ```
+2. Point the stack at it and bring it up -- `CONTAINER_ENGINE_SOCKET` is a
+   plain environment variable `docker-compose.yml`'s `api` service reads
+   for the *host* side of the socket bind-mount (the container-internal
+   path is unaffected, see the compose file's comments there):
+   ```sh
+   export CONTAINER_ENGINE_SOCKET=$XDG_RUNTIME_DIR/podman/podman.sock   # rootless
+   # or: export CONTAINER_ENGINE_SOCKET=/run/podman/podman.sock        # rootful
+   podman-compose up -d --build
+   # or: podman compose up -d --build
+   ```
+3. `docker network connect` in this README and `scripts/dev-up.sh` becomes
+   `podman network connect` for attaching an existing container to
+   `kingdom-net`.
+
+To sanity-check the resolver detection worked, the same way this project's
+own testing did:
+```sh
+podman logs kingdom-proxy-nginx | grep kingdom-proxy   # should show the detected resolver
+podman exec kingdom-proxy-nginx nginx -t
+```
+
+**Caveat:** this was built and end-to-end tested against a real Docker
+daemon; the Podman-specific pieces (resolver detection, the compat API
+calls, the socket path) are implemented against Podman's documented
+Docker-compatibility rather than verified against a live Podman daemon, so
+give it that same smoke test (create a route, confirm traffic flows, then
+restart the target container and confirm the route still works) before
+relying on it.
 
 ## Web dashboard
 
