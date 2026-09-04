@@ -20,8 +20,8 @@ done
 cat <<'EOF'
 
 kingdom-proxy is up:
-  proxy:     http://localhost:8080
-  admin API: http://localhost:9000
+  proxy:     http://localhost:4800
+  admin API: http://localhost:4810
 
 Try it out:
   # Attach some container to the shared network so nginx and the api can
@@ -29,16 +29,16 @@ Try it out:
   docker network connect kingdom-net <your-container>
 
   # Register a route (path prefix -> container:port):
-  curl -X POST http://localhost:9000/routes \
+  curl -X POST http://localhost:4810/routes \
     -H 'content-type: application/json' \
     -d '{"path_prefix":"/myapp","container_name":"<your-container>","container_port":8080}'
 
   # List routes:
-  curl http://localhost:9000/routes
+  curl http://localhost:4810/routes
 
   # Traffic now flows:
-  curl http://localhost:8080/myapp/
+  curl http://localhost:4800/myapp/
 
   # Check sync status:
-  curl http://localhost:9000/status
+  curl http://localhost:4810/status
 EOF

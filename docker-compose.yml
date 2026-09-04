@@ -5,7 +5,7 @@ services:
       dockerfile: Dockerfile.nginx
     container_name: kingdom-proxy-nginx
     ports:
-      - "8080:80"
+      - "4800:80"
     volumes:
       # Named volume shared with `api`. Started first (see api's
       # depends_on below) so this is the container that populates the
@@ -32,7 +32,7 @@ services:
     ports:
       # Admin API stays on loopback by default -- it's unauthenticated.
       # Widen this only if you know what you're doing.
-      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:4810:9000"
     volumes:
       - nginx-conf:/etc/nginx/conf.d
       - api-data:/data

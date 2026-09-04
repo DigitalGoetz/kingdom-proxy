@@ -12,14 +12,14 @@ containers by path, built as two cooperating pieces:
 
 ```
                      ┌─────────────────────────┐
-   client ────────▶  │  nginx  (:8080 → :80)    │ ──▶ any container on
+   client ────────▶  │  nginx  (:4800 → :80)    │ ──▶ any container on
                      │  baseline + generated    │     kingdom-net, by
                      │  config, path routing     │     path prefix
                      └────────────┬─────────────┘
                                   │ docker exec (nginx -t / -s reload)
                                   │ shared volume (conf.d)
                      ┌────────────▼─────────────┐
-   admin ─────────▶  │  kingdom-proxy-api (:9000)│
+   admin ─────────▶  │  kingdom-proxy-api (:4810)│
    (curl/scripts)    │  HTTP API → SQLite         │
                      │  background sync worker    │
                      └────────────┬─────────────┘
@@ -65,8 +65,8 @@ docker compose up -d --build
 ```
 
 This starts two containers on a shared `kingdom-net` docker network:
-nginx on `localhost:8080` (the actual proxy) and the admin API on
-`127.0.0.1:9000` (loopback-only by default — it's unauthenticated).
+nginx on `localhost:4800` (the actual proxy) and the admin API on
+`127.0.0.1:4810` (loopback-only by default — it's unauthenticated).
 
 Any container you want to route to must be attached to `kingdom-net` too:
 
@@ -77,7 +77,7 @@ docker network connect kingdom-net <your-container>
 Then register a route:
 
 ```sh
-curl -X POST http://localhost:9000/routes \
+curl -X POST http://localhost:4810/routes \
   -H 'content-type: application/json' \
   -d '{
         "path_prefix": "/myapp",
@@ -88,10 +88,10 @@ curl -X POST http://localhost:9000/routes \
 ```
 
 `strip_prefix: true` (the default) means a request to
-`http://localhost:8080/myapp/foo` reaches the container as `/foo`; set it
+`http://localhost:4800/myapp/foo` reaches the container as `/foo`; set it
 to `false` to forward `/myapp/foo` unchanged.
 
-Traffic now flows: `curl http://localhost:8080/myapp/`
+Traffic now flows: `curl http://localhost:4800/myapp/`
 
 ## Admin API
 
