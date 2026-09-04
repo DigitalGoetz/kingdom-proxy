@@ -28,6 +28,7 @@ services:
       KP_DOCKER_SOCKET: "/var/run/docker.sock"
       KP_NGINX_CONF_PATH: "/etc/nginx/conf.d/kingdom-routes.conf"
       KP_NGINX_CONTAINER_NAME: "kingdom-proxy-nginx"
+      KP_NETWORK_NAME: "kingdom-net"
       KP_SYNC_INTERVAL_SECONDS: "30"
     ports:
       # Admin API stays on loopback by default -- it's unauthenticated.

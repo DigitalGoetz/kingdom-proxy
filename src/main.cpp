@@ -35,6 +35,7 @@ int main() {
   const std::string nginx_conf_path =
       get("KP_NGINX_CONF_PATH", "/etc/nginx/conf.d/kingdom-routes.conf");
   const std::string nginx_container_name = get("KP_NGINX_CONTAINER_NAME", "kingdom-proxy-nginx");
+  const std::string network_name = get("KP_NETWORK_NAME", "kingdom-net");
   const int sync_interval_seconds = get_int("KP_SYNC_INTERVAL_SECONDS", 30);
 
   KP_LOG_INFO(kComponent, "starting kingdom-proxy-api");
@@ -51,7 +52,7 @@ int main() {
                                 std::chrono::seconds(sync_interval_seconds));
     sync_worker.start();
 
-    kp::ApiServer api_server(database, docker_client, sync_worker);
+    kp::ApiServer api_server(database, docker_client, sync_worker, network_name);
     g_api_server = &api_server;
     std::signal(SIGINT, handle_shutdown_signal);
     std::signal(SIGTERM, handle_shutdown_signal);

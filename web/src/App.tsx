@@ -1,15 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api";
-import { CreateRouteForm } from "./components/CreateRouteForm";
+import { ContainersPanel } from "./components/ContainersPanel";
+import { CreateRouteForm, type TargetPrefill } from "./components/CreateRouteForm";
 import { RoutesTable } from "./components/RoutesTable";
 import { StatusBar } from "./components/StatusBar";
-import type { Config, NewRouteInput, RouteUpdateInput } from "./types";
+import type { Config, ContainerSummary, NewRouteInput, RouteUpdateInput } from "./types";
 
 const POLL_INTERVAL_MS = 5000;
 
 export default function App() {
   const [config, setConfig] = useState<Config | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [containers, setContainers] = useState<ContainerSummary[]>([]);
+  const [containersError, setContainersError] = useState<string | null>(null);
+  const [prefill, setPrefill] = useState<TargetPrefill | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval>>();
 
   const refresh = useCallback(async () => {
@@ -19,6 +23,15 @@ export default function App() {
       setLoadError(null);
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : String(e));
+    }
+
+    // Kept independent of the config fetch above: docker being briefly
+    // unreachable shouldn't take down the route dashboard, just this panel.
+    try {
+      setContainers(await api.getContainers());
+      setContainersError(null);
+    } catch (e) {
+      setContainersError(e instanceof Error ? e.message : String(e));
     }
   }, []);
 
@@ -55,8 +68,23 @@ export default function App() {
           <div className="panel">
             <StatusBar sync={config.sync} reservedPathPrefix={config.reserved_path_prefix} />
           </div>
-          <CreateRouteForm reservedPathPrefix={config.reserved_path_prefix} onCreate={handleCreate} />
+          <CreateRouteForm
+            reservedPathPrefix={config.reserved_path_prefix}
+            prefill={prefill}
+            onCreate={handleCreate}
+          />
           <RoutesTable routes={config.routes} onUpdate={handleUpdate} onDelete={handleDelete} />
+          {containersError ? (
+            <p className="error-banner">Couldn't list containers: {containersError}</p>
+          ) : (
+            <ContainersPanel
+              containers={containers}
+              networkName={config.network_name}
+              onSelectTarget={(containerName, containerPort) =>
+                setPrefill({ containerName, containerPort })
+              }
+            />
+          )}
         </>
       )}
     </>

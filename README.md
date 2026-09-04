@@ -195,8 +195,17 @@ Open `http://localhost:4800/` — nginx serves the built React app from its
 document root. It lists current routes (enabled and disabled), lets you
 create a new one, edit a route's target/port/strip-prefix in place, toggle
 it enabled/disabled, or delete it, and shows the background sync worker's
-status. It talks to the admin API at `/_proxy/*` on the same origin, so
-there's no separate host/port to configure and nothing extra to expose.
+status. Each route also has an **Open ↗** link to it in a new tab. It
+talks to the admin API at `/_proxy/*` on the same origin, so there's no
+separate host/port to configure and nothing extra to expose.
+
+Below that, a **read-only containers panel** lists every currently-running
+container on the host (not just ones already on `kingdom-net`) with the
+ports each one listens on, to help you find what to route to — click a
+port to fill it into the create-route form above. A container not yet on
+`kingdom-net` is flagged as such; a route to it will 502 until you run
+`docker network connect kingdom-net <container>` (or the `podman`
+equivalent).
 
 For local UI development against a running stack:
 
@@ -251,7 +260,8 @@ the API's own, with the `/_proxy` prefix already stripped.
 |--------|----------------|------------------------------------------------|
 | GET    | `/healthz`     | Liveness check.                                |
 | GET    | `/status`      | Last sync result, timestamp, route count.      |
-| GET    | `/config`      | Everything the web dashboard needs in one call: all routes, `reserved_path_prefix`, and sync status. |
+| GET    | `/config`      | Everything the web dashboard needs in one call: all routes, `reserved_path_prefix`, `network_name`, and sync status. |
+| GET    | `/containers`  | Read-only: every running container on the host, with `id`, `name`, `image`, `status`, `ports`, and `on_network` (whether it's attached to `network_name`). |
 | GET    | `/routes`      | List all routes.                               |
 | POST   | `/routes`      | Create a route (see body above).               |
 | GET    | `/routes/{id}` | Fetch one route.                               |
@@ -298,6 +308,7 @@ tests/       Catch2 unit tests (config rendering, database)
 | `KP_DOCKER_SOCKET`           | `/var/run/docker.sock`                     |
 | `KP_NGINX_CONF_PATH`         | `/etc/nginx/conf.d/kingdom-routes.conf`    |
 | `KP_NGINX_CONTAINER_NAME`    | `kingdom-proxy-nginx`                      |
+| `KP_NETWORK_NAME`            | `kingdom-net`                              |
 | `KP_SYNC_INTERVAL_SECONDS`   | `30`                                       |
 
 ## Building locally (without Docker)
@@ -336,7 +347,11 @@ KP_NGINX_CONF_PATH=/tmp/kingdom-routes.conf \
   as root, which is effectively equivalent to root on the host — the same
   trust tradeoff as any tool that talks to `docker.sock` (Traefik's docker
   provider, watchtower, etc.). Don't run this on a host you don't trust
-  route-creators with.
+  route-creators with. `GET /containers` (and the dashboard's containers
+  panel) makes this tradeoff concretely visible rather than just
+  theoretical: it lists every running container on the *host*, including
+  ones with nothing to do with this stack — container and image names,
+  status, and listening ports.
 - `path_prefix` and `container_name` are validated against a strict
   allow-list of characters before being interpolated into generated nginx
   config, since there's no templating engine doing escaping for us.

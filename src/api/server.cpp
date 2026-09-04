@@ -2,6 +2,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <format>
 #include <regex>
 #include <stdexcept>
@@ -59,10 +60,27 @@ void send_error(httplib::Response& res, int status, const std::string& message) 
   res.set_content(json{{"error", message}}.dump(), "application/json");
 }
 
+json container_to_json(const ContainerSummary& container, const std::string& network_name) {
+  const bool on_network = std::find(container.networks.begin(), container.networks.end(),
+                                     network_name) != container.networks.end();
+  return json{
+      {"id", container.id},
+      {"name", container.name},
+      {"image", container.image},
+      {"status", container.status},
+      {"ports", container.ports},
+      {"on_network", on_network},
+  };
+}
+
 }  // namespace
 
-ApiServer::ApiServer(Database& database, const DockerClient& docker_client, SyncWorker& sync_worker)
-    : database_(database), docker_client_(docker_client), sync_worker_(sync_worker) {
+ApiServer::ApiServer(Database& database, const DockerClient& docker_client, SyncWorker& sync_worker,
+                      std::string network_name)
+    : database_(database),
+      docker_client_(docker_client),
+      sync_worker_(sync_worker),
+      network_name_(std::move(network_name)) {
   setup_routes();
 }
 
@@ -84,6 +102,25 @@ void ApiServer::setup_routes() {
                      "application/json");
   });
 
+  // Read-only: lists currently-running containers on the host, with the
+  // ports each one listens on, to help pick a target for a new route --
+  // see the web dashboard's containers panel. Not scoped to this stack's
+  // own network; `on_network` flags whether a container is already
+  // reachable for routing or still needs `docker network connect
+  // <network> <container>` first.
+  server_.Get("/containers", [this](const httplib::Request&, httplib::Response& res) {
+    json containers = json::array();
+    try {
+      for (const auto& container : docker_client_.list_containers()) {
+        containers.push_back(container_to_json(container, network_name_));
+      }
+    } catch (const std::exception& e) {
+      send_error(res, 502, std::format("failed to reach docker: {}", e.what()));
+      return;
+    }
+    res.set_content(containers.dump(), "application/json");
+  });
+
   // A single aggregate endpoint for the web UI's initial load: the full
   // route table plus enough context (the reserved prefix, sync status) to
   // render a dashboard without several round trips.
@@ -94,6 +131,7 @@ void ApiServer::setup_routes() {
 
     res.set_content(json{{"routes", routes},
                           {"reserved_path_prefix", std::string(kReservedPathPrefix)},
+                          {"network_name", network_name_},
                           {"sync",
                            {{"last_sync_ok", status.last_sync_ok},
                             {"last_error", status.last_error},

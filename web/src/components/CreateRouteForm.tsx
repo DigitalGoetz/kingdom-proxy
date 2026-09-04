@@ -1,12 +1,21 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { NewRouteInput } from "../types";
 import { containerNameError, containerPortError, pathPrefixError } from "../validation";
 
+export interface TargetPrefill {
+  containerName: string;
+  containerPort: number;
+}
+
 export function CreateRouteForm({
   reservedPathPrefix,
+  prefill,
   onCreate,
 }: {
   reservedPathPrefix: string;
+  // Set (a new object each time, even for the same target) by clicking a
+  // port in the containers panel below -- see App.tsx.
+  prefill?: TargetPrefill | null;
   onCreate: (input: NewRouteInput) => Promise<void>;
 }) {
   const [pathPrefix, setPathPrefix] = useState("");
@@ -15,6 +24,7 @@ export function CreateRouteForm({
   const [stripPrefix, setStripPrefix] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [fieldError, setFieldError] = useState<string | null>(null);
+  const pathPrefixRef = useRef<HTMLInputElement>(null);
 
   const reset = () => {
     setPathPrefix("");
@@ -22,6 +32,14 @@ export function CreateRouteForm({
     setContainerPort("");
     setStripPrefix(true);
   };
+
+  useEffect(() => {
+    if (!prefill) return;
+    setContainerName(prefill.containerName);
+    setContainerPort(String(prefill.containerPort));
+    pathPrefixRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    pathPrefixRef.current?.focus();
+  }, [prefill]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -56,6 +74,7 @@ export function CreateRouteForm({
           <label htmlFor="path_prefix">Path prefix</label>
           <input
             id="path_prefix"
+            ref={pathPrefixRef}
             type="text"
             placeholder="/myapp"
             value={pathPrefix}

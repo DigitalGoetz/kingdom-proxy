@@ -112,6 +112,15 @@ export function RouteRow({
         <td style={{ color: "var(--text-muted)", fontSize: 12.5 }}>{route.last_seen_ip || "—"}</td>
         <td style={{ color: "var(--text-muted)", fontSize: 12.5 }}>{formatRelative(route.updated_at)}</td>
         <td className="actions">
+          <a
+            className="btn small"
+            href={`${route.path_prefix}/`}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={`Open ${route.path_prefix}/ in a new tab`}
+          >
+            Open ↗
+          </a>
           <button className="small" disabled={busy} onClick={toggleEnabled}>
             {route.enabled ? "Disable" : "Enable"}
           </button>

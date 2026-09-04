@@ -1,4 +1,4 @@
-import type { Config, NewRouteInput, RouteUpdateInput, RouteWithWarning } from "./types";
+import type { Config, ContainerSummary, NewRouteInput, RouteUpdateInput, RouteWithWarning } from "./types";
 
 // Reaches kingdom-proxy-api through the proxy itself, on the same origin
 // this page is served from -- see nginx.baseline.conf's "/_proxy/" location.
@@ -40,6 +40,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   getConfig: () => request<Config>("/config"),
+  getContainers: () => request<ContainerSummary[]>("/containers"),
 
   createRoute: (input: NewRouteInput) =>
     request<RouteWithWarning>("/routes", { method: "POST", body: JSON.stringify(input) }),

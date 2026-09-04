@@ -5,6 +5,7 @@
 
 #include <cstdint>
 #include <format>
+#include <set>
 
 #include "util/logger.hpp"
 
@@ -87,6 +88,53 @@ std::optional<ContainerInfo> DockerClient::inspect_container(const std::string& 
   }
 
   return info;
+}
+
+std::vector<ContainerSummary> DockerClient::list_containers() const {
+  auto client = make_client(socket_path_);
+  // No `all=true`: only running containers, matching what's actually
+  // useful to route to right now.
+  auto res = client.Get("/containers/json");
+
+  if (!res) {
+    KP_LOG_ERROR(kComponent, "failed to reach docker socket at '{}': {}", socket_path_,
+                 httplib::to_string(res.error()));
+    throw std::runtime_error(std::format("cannot reach docker socket at '{}'", socket_path_));
+  }
+  if (res->status != 200) {
+    throw std::runtime_error(std::format("docker container list failed: HTTP {}", res->status));
+  }
+
+  std::vector<ContainerSummary> summaries;
+  for (const auto& item : json::parse(res->body)) {
+    ContainerSummary summary;
+    summary.id = item.value("Id", "");
+    summary.image = item.value("Image", "");
+    summary.status = item.value("Status", "");
+
+    if (item.contains("Names") && !item["Names"].empty()) {
+      summary.name = item["Names"].front().get<std::string>();
+      if (!summary.name.empty() && summary.name.front() == '/') summary.name.erase(0, 1);
+    }
+
+    if (item.contains("Ports")) {
+      std::set<int> distinct_ports;
+      for (const auto& port : item["Ports"]) {
+        if (port.contains("PrivatePort")) distinct_ports.insert(port["PrivatePort"].get<int>());
+      }
+      summary.ports.assign(distinct_ports.begin(), distinct_ports.end());
+    }
+
+    if (item.contains("/NetworkSettings/Networks"_json_pointer)) {
+      for (const auto& [network_name, unused] : item["NetworkSettings"]["Networks"].items()) {
+        summary.networks.push_back(network_name);
+      }
+    }
+
+    summaries.push_back(std::move(summary));
+  }
+
+  return summaries;
 }
 
 DockerClient::ExecResult DockerClient::exec(const std::string& container_name,

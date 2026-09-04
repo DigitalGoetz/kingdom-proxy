@@ -19,7 +19,12 @@ namespace kp {
 // see docker-compose.yml and the README.
 class ApiServer {
  public:
-  ApiServer(Database& database, const DockerClient& docker_client, SyncWorker& sync_worker);
+  // `network_name` is the docker network this stack's containers share
+  // (see docker-compose.yml) -- used only to flag, in GET /containers,
+  // which listed containers are already reachable for routing and which
+  // still need `docker network connect <network_name> <container>` first.
+  ApiServer(Database& database, const DockerClient& docker_client, SyncWorker& sync_worker,
+            std::string network_name);
 
   // Blocks until stop() is called from another thread.
   void listen(const std::string& host, int port);
@@ -32,6 +37,7 @@ class ApiServer {
   Database& database_;
   const DockerClient& docker_client_;
   SyncWorker& sync_worker_;
+  std::string network_name_;
 };
 
 }  // namespace kp

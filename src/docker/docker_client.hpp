@@ -14,6 +14,17 @@ struct ContainerInfo {
   std::vector<std::string> networks;  // Names of docker networks the container is on.
 };
 
+// A lighter-weight summary for listing containers, e.g. to help someone
+// pick a target for a new route -- see ApiServer's GET /containers.
+struct ContainerSummary {
+  std::string id;
+  std::string name;
+  std::string image;
+  std::string status;         // Docker's own human-readable status, e.g. "Up 2 hours".
+  std::vector<int> ports;     // Distinct ports the container listens on (published or not).
+  std::vector<std::string> networks;
+};
+
 // Talks to the Docker Engine API over the local unix socket. Used for two
 // things: (1) validating a route's target container exists, is running, and
 // is reachable before we persist the route, and (2) triggering an in-place
@@ -25,6 +36,11 @@ class DockerClient {
 
   // Returns std::nullopt if no such container exists.
   std::optional<ContainerInfo> inspect_container(const std::string& name_or_id) const;
+
+  // Lists currently-running containers on the host -- not just ones on
+  // this stack's network -- so the admin API can help someone see what's
+  // available to route to (see ApiServer's GET /containers). Read-only.
+  std::vector<ContainerSummary> list_containers() const;
 
   // Runs `nginx -t` inside the target container to validate the freshly
   // generated config, and only reloads if that check passes. Returns true

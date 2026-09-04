@@ -20,6 +20,7 @@ export interface SyncStatus {
 export interface Config {
   routes: Route[];
   reserved_path_prefix: string;
+  network_name: string;
   sync: SyncStatus;
 }
 
@@ -39,6 +40,15 @@ export interface RouteUpdateInput {
 
 export interface RouteWithWarning extends Route {
   warning?: string;
+}
+
+export interface ContainerSummary {
+  id: string;
+  name: string;
+  image: string;
+  status: string;
+  ports: number[];
+  on_network: boolean;
 }
 
 export interface ApiError {
