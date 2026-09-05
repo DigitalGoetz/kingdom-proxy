@@ -42,6 +42,13 @@ export default function App() {
   }, [refresh]);
 
   const handleCreate = async (input: NewRouteInput) => {
+    // If the target container isn't on kingdom-net yet, attach it first --
+    // otherwise the route would be created but wouldn't actually work until
+    // someone noticed and hit "Attach" in the containers panel below.
+    const target = containers.find((c) => c.name === input.container_name);
+    if (target && !target.on_network) {
+      await api.attachContainer(target.name);
+    }
     await api.createRoute(input);
     await refresh();
   };
@@ -70,7 +77,7 @@ export default function App() {
 
       {config && (
         <>
-          <div className="panel">
+          <div className="panel gsb">
             <StatusBar sync={config.sync} reservedPathPrefix={config.reserved_path_prefix} />
           </div>
           <CreateRouteForm

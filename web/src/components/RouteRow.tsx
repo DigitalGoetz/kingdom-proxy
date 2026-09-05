@@ -14,14 +14,12 @@ export function RouteRow({
   const [editing, setEditing] = useState(false);
   const [containerName, setContainerName] = useState(route.container_name);
   const [containerPort, setContainerPort] = useState(String(route.container_port));
-  const [stripPrefix, setStripPrefix] = useState(route.strip_prefix);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const startEdit = () => {
     setContainerName(route.container_name);
     setContainerPort(String(route.container_port));
-    setStripPrefix(route.strip_prefix);
     setError(null);
     setEditing(true);
   };
@@ -36,7 +34,7 @@ export function RouteRow({
     setBusy(true);
     setError(null);
     try {
-      await onUpdate(route.id, { container_name: containerName, container_port: port, strip_prefix: stripPrefix });
+      await onUpdate(route.id, { container_name: containerName, container_port: port });
       setEditing(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -79,13 +77,7 @@ export function RouteRow({
           :
           <input type="number" value={containerPort} onChange={(e) => setContainerPort(e.target.value)} style={{ width: "35%", marginLeft: 4 }} />
         </td>
-        <td>
-          <label className="checkbox-field" style={{ paddingBottom: 0 }}>
-            <input type="checkbox" checked={stripPrefix} onChange={(e) => setStripPrefix(e.target.checked)} />
-            strip
-          </label>
-        </td>
-        <td colSpan={2}>
+        <td colSpan={3}>
           {error && <span style={{ color: "var(--danger)", fontSize: 12 }}>{error}</span>}
         </td>
         <td className="actions">

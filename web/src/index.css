@@ -1,37 +1,46 @@
+/* AstroUX Design System (https://www.astrouxds.com/) tokens, straight from
+   the @astrouxds/tokens package: primitive palette, then the dark-theme
+   system/component tokens.
+   AstroUX ships a `.light-theme` override too (theme.light.css), but it only
+   re-themes the *system* colors (page background, text, borders) -- the
+   *component* tokens (button/card/table/tag/input colors etc., in
+   base.component.css) are hardcoded to their dark values with no light
+   counterpart in this package, because in the real component library that
+   piece comes from each Stencil component's own compiled stylesheet, not
+   from portable tokens. Applying only the system-level light override here
+   would leave dark-navy cards and tables floating on a light page. Rather
+   than ship that inconsistency, this follows AstroUX's own stated default:
+   "Astro applications will default to the dark theme with no additional
+   involvement by the developer." Revisit with the real
+   @astrouxds/astro-web-components if this app ever needs a real light mode. */
+@import "@astrouxds/tokens/dist/css/base.reference.css";
+@import "@astrouxds/tokens/dist/css/base.system.css";
+@import "@astrouxds/tokens/dist/css/base.component.css";
+
+/* ---- Semantic aliases onto AstroUX tokens ----
+   Keeps the rest of this file (and the components) reading in terms of the
+   app's own vocabulary, while every value traces back to a real Astro
+   design token rather than an arbitrary one. */
 :root {
-  color-scheme: light dark;
+  color-scheme: dark;
 
-  --bg: #f7f7f8;
-  --surface: #ffffff;
-  --border: #e0e0e5;
-  --text: #1a1a1f;
-  --text-muted: #6b6b76;
-  --accent: #3457d5;
-  --accent-contrast: #ffffff;
-  --danger: #c8393b;
-  --danger-bg: #fdecec;
-  --success: #1f8a4c;
-  --success-bg: #eaf7ef;
-  --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-  --sans:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  --radius: 8px;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #16161a;
-    --surface: #1e1e23;
-    --border: #313138;
-    --text: #ececef;
-    --text-muted: #96969f;
-    --accent: #7b93ff;
-    --accent-contrast: #0d0d10;
-    --danger: #ff6b6d;
-    --danger-bg: #3a1f20;
-    --success: #52d688;
-    --success-bg: #14301f;
-  }
+  --bg: var(--color-background-base-default);
+  --surface: var(--color-background-surface-default);
+  --surface-header: var(--color-background-surface-header);
+  --border: var(--card-color-border);
+  --text: var(--color-text-primary);
+  --text-muted: var(--color-text-secondary);
+  --accent: var(--color-background-interactive-default);
+  --accent-hover: var(--color-background-interactive-hover);
+  --accent-contrast: var(--button-color-text-primary);
+  --danger: var(--color-status-critical);
+  --danger-bg: var(--notification-banner-color-background);
+  --success: var(--color-status-normal);
+  --success-bg: var(--notification-banner-color-background);
+  --focus-ring: var(--color-border-focus-default);
+  --mono: "Roboto Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  --sans: var(--font-family-sans);
+  --radius: var(--radius-base);
 }
 
 * {
@@ -43,159 +52,213 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--sans);
-  font-size: 14px;
-  line-height: 1.5;
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-sm);
 }
 
 #root {
   max-width: 1080px;
   margin: 0 auto;
-  padding: 32px 24px 64px;
+  padding: var(--spacing-8) var(--spacing-6) var(--spacing-16);
 }
 
 h1 {
-  font-size: 20px;
-  margin: 0 0 4px;
+  font-family: var(--font-heading-2-font-family);
+  font-size: var(--font-heading-2-font-size);
+  font-weight: 500;
+  line-height: var(--font-heading-2-line-height);
+  margin: 0 0 var(--spacing-1);
 }
 
 h2 {
-  font-size: 15px;
-  margin: 0 0 12px;
+  font-family: var(--font-heading-6-font-family);
+  font-size: var(--font-heading-6-font-size);
+  font-weight: 500;
+  line-height: var(--font-heading-6-line-height);
+  margin: calc(var(--spacing-4) * -1) calc(var(--spacing-4) * -1) var(--spacing-4);
+  padding: var(--card-header-padding-y) var(--card-header-padding-x) var(--card-header-padding-y)
+    var(--spacing-4);
+  border-bottom: var(--card-border-width) solid var(--border);
+  color: var(--text);
+}
+.panel.gsb h2 {
+  border-bottom-color: var(--color-palette-darkblue-700);
 }
 
 .subtitle {
   color: var(--text-muted);
-  margin: 0 0 28px;
+  margin: 0 0 var(--spacing-8);
 }
 
 code {
   font-family: var(--mono);
-  background: var(--border);
+  background: var(--color-background-base-hover);
+  color: var(--text);
   padding: 1px 5px;
-  border-radius: 4px;
+  border-radius: var(--radius-base);
   font-size: 0.92em;
 }
 
+/* Astro "Card" component. */
 .panel {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 20px;
-  margin-bottom: 24px;
+  background: var(--card-color-background);
+  border: var(--card-border-width) solid var(--border);
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow);
+  padding: var(--spacing-4);
+  margin-bottom: var(--spacing-6);
+}
+
+/* The Global Status Bar is, by AstroUX convention, always dark themed, even
+   inside an otherwise light-themed app -- so it's pinned to the base.system
+   dark values instead of the semantic (theme-aware) aliases above. */
+.panel.gsb {
+  background: var(--gsb-color-background);
+  color: var(--gsb-color-text);
+  border-color: var(--color-palette-darkblue-700);
 }
 
 .status-bar {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: var(--spacing-4);
   flex-wrap: wrap;
-  font-size: 13px;
-  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  color: inherit;
 }
 
+.status-bar code {
+  background: var(--color-palette-darkblue-800);
+  color: inherit;
+}
+
+/* Astro "Status Symbol", used here as a compact LED-style indicator dot. */
 .status-dot {
   display: inline-block;
   width: 8px;
   height: 8px;
-  border-radius: 50%;
-  margin-right: 6px;
+  border-radius: var(--radius-circle);
+  margin-right: var(--spacing-2);
 }
 .status-dot.ok {
-  background: var(--success);
+  background: var(--status-symbol-color-fill-normal-on-dark);
+  box-shadow: 0 0 4px var(--status-symbol-color-fill-normal-on-dark);
 }
 .status-dot.error {
-  background: var(--danger);
+  background: var(--status-symbol-color-fill-critical-on-dark);
+  box-shadow: 0 0 4px var(--status-symbol-color-fill-critical-on-dark);
 }
 
+/* Astro "Notification Banner", simplified to a single accent edge. */
 .error-banner {
-  background: var(--danger-bg);
-  color: var(--danger);
-  border: 1px solid var(--danger);
-  border-radius: var(--radius);
-  padding: 10px 14px;
-  margin-bottom: 16px;
-  font-size: 13px;
+  background: var(--notification-banner-color-background);
+  color: var(--color-text-error);
+  border: var(--border-width-xs) solid var(--notification-banner-color-border-outer-critical);
+  border-left: var(--border-width-lg) solid var(--notification-banner-color-border-inner-critical);
+  border-radius: var(--notification-banner-radius-outer);
+  padding: var(--notification-banner-padding-y-small) var(--notification-banner-padding-right)
+    var(--notification-banner-padding-y-small) var(--notification-banner-padding-left);
+  margin-bottom: var(--spacing-4);
+  font-size: var(--font-size-xs);
 }
 
 form.route-form {
   display: grid;
-  grid-template-columns: 1.2fr 1.2fr 0.7fr auto auto;
-  gap: 10px;
+  grid-template-columns: 1.2fr 1.2fr 0.7fr auto;
+  gap: var(--spacing-2);
   align-items: end;
 }
 
 .field {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--spacing-1);
 }
 
 .field label {
-  font-size: 12px;
+  font-size: var(--font-size-xs);
   color: var(--text-muted);
 }
 
 input[type="text"],
 input[type="number"] {
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 7px 9px;
-  font-size: 13px;
-  color: var(--text);
+  background: var(--input-color-background-default);
+  border: var(--input-border-width) solid var(--input-color-border-default);
+  border-radius: var(--input-radius);
+  padding: var(--input-padding-y-medium) var(--input-padding-x-medium);
+  font-size: var(--font-size-sm);
+  font-family: inherit;
+  color: var(--input-color-text-default);
   width: 100%;
 }
 
-input:focus {
-  outline: 2px solid var(--accent);
-  outline-offset: -1px;
+input[type="text"]::placeholder,
+input[type="number"]::placeholder {
+  color: var(--input-color-text-placeholder);
 }
 
-.checkbox-field {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  white-space: nowrap;
-  padding-bottom: 8px;
+input[type="text"]:hover,
+input[type="number"]:hover {
+  border-color: var(--input-color-border-hover);
 }
 
-/* a.btn lets an <a> (e.g. a route's "Open" link) match button styling --
-   used instead of a <button onClick={() => window.open(...)}> so it's a
-   real link: middle-click/cmd-click "open in new tab" and "copy link"
-   work as expected. */
+input[type="checkbox"] {
+  accent-color: var(--accent);
+  width: 18px;
+  height: 18px;
+}
+
+:focus-visible {
+  outline: var(--border-width-focus-default) solid var(--focus-ring);
+  outline-offset: var(--spacing-focus-default);
+}
+
+/* Astro "Button". a.btn lets an <a> (e.g. a route's "Open" link) match
+   button styling -- used instead of a <button onClick={() => window.open(...)}>
+   so it's a real link: middle-click/cmd-click "open in new tab" and "copy
+   link" work as expected. Plain buttons here use Astro's secondary
+   (outlined) style; .primary opts into the filled primary style. */
 button,
 a.btn {
   font-family: inherit;
-  font-size: 13px;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text);
-  padding: 7px 14px;
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  border-radius: var(--button-radius);
+  border: var(--button-border-width) solid var(--button-color-border-secondary-default);
+  background: var(--button-color-background-secondary);
+  color: var(--button-color-text-secondary-default);
+  padding: var(--button-padding-y-medium) var(--button-padding-x-medium);
   cursor: pointer;
   text-decoration: none;
   display: inline-block;
 }
 button:hover,
 a.btn:hover {
-  border-color: var(--accent);
+  border-color: var(--button-color-border-secondary-hover);
+  color: var(--button-color-text-secondary-hover);
 }
 button:disabled {
-  opacity: 0.5;
+  opacity: var(--opacity-disabled);
   cursor: default;
 }
 button.primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--accent-contrast);
+  background: var(--button-color-background-primary-default);
+  border-color: var(--button-color-border-primary-default);
+  color: var(--button-color-text-primary);
+}
+button.primary:hover {
+  background: var(--button-color-background-primary-hover);
+  border-color: var(--button-color-border-primary-hover);
+  color: var(--button-color-text-primary);
 }
 button.danger {
-  color: var(--danger);
+  color: var(--color-status-critical);
+  border-color: var(--color-status-critical);
 }
 button.small,
 a.btn.small {
-  padding: 4px 10px;
-  font-size: 12px;
+  padding: var(--button-padding-y-small) var(--button-padding-x-small);
+  font-size: var(--font-size-xs);
 }
 
 table {
@@ -203,51 +266,63 @@ table {
   border-collapse: collapse;
 }
 
+thead {
+  background: var(--table-header-color-background);
+}
+
 th {
   text-align: left;
-  font-size: 12px;
+  font-size: var(--font-size-xs);
   color: var(--text-muted);
-  font-weight: 600;
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--border);
+  font-weight: 700;
+  padding: var(--table-header-cell-padding);
+  border-bottom: var(--table-row-border-width) solid var(--table-row-color-border);
 }
 
 td {
-  padding: 10px;
-  border-bottom: 1px solid var(--border);
+  padding: var(--table-body-cell-padding-y) var(--table-body-cell-padding-x);
+  border-bottom: var(--table-row-border-width) solid var(--table-row-color-border);
   vertical-align: middle;
+}
+
+tbody tr:hover {
+  background: var(--table-row-color-background-hover);
 }
 
 tr:last-child td {
   border-bottom: none;
 }
 
+/* Astro "Tag", used here for status pills (pass/fail/unknown). */
 .badge {
   display: inline-block;
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-weight: 600;
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  padding: var(--tag-padding-y) var(--tag-padding-x);
+  border-radius: var(--tag-radius);
+  color: var(--tag-color-text);
 }
 .badge.enabled {
-  color: var(--success);
-  background: var(--success-bg);
+  background: var(--tag-color-background-pass);
+  border: var(--border-width-xs) solid var(--tag-color-border-pass);
+  box-shadow: var(--tag-shadow-inner-pass);
 }
 .badge.disabled {
-  color: var(--text-muted);
-  background: var(--border);
+  background: var(--tag-color-background-unknown);
+  border: var(--border-width-xs) solid var(--tag-color-border-unknown);
+  box-shadow: var(--tag-shadow-inner-unknown);
 }
 
 .actions {
   display: flex;
-  gap: 6px;
+  gap: var(--spacing-2);
   justify-content: flex-end;
 }
 
 .empty-state {
   color: var(--text-muted);
   text-align: center;
-  padding: 32px 0;
+  padding: var(--spacing-8) 0;
 }
 
 .target-cell {

@@ -28,7 +28,8 @@ export interface NewRouteInput {
   path_prefix: string;
   container_name: string;
   container_port: number;
-  strip_prefix: boolean;
+  // Not sent -- the server defaults new routes to stripping the prefix,
+  // which is all this app's users need.
 }
 
 export interface RouteUpdateInput {

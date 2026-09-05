@@ -21,7 +21,6 @@ export function CreateRouteForm({
   const [pathPrefix, setPathPrefix] = useState("");
   const [containerName, setContainerName] = useState("");
   const [containerPort, setContainerPort] = useState("");
-  const [stripPrefix, setStripPrefix] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [fieldError, setFieldError] = useState<string | null>(null);
   const pathPrefixRef = useRef<HTMLInputElement>(null);
@@ -30,7 +29,6 @@ export function CreateRouteForm({
     setPathPrefix("");
     setContainerName("");
     setContainerPort("");
-    setStripPrefix(true);
   };
 
   useEffect(() => {
@@ -57,7 +55,7 @@ export function CreateRouteForm({
 
     setSubmitting(true);
     try {
-      await onCreate({ path_prefix: pathPrefix, container_name: containerName, container_port: port, strip_prefix: stripPrefix });
+      await onCreate({ path_prefix: pathPrefix, container_name: containerName, container_port: port });
       reset();
     } catch (e) {
       setFieldError(e instanceof Error ? e.message : String(e));
@@ -106,14 +104,6 @@ export function CreateRouteForm({
             required
           />
         </div>
-        <label className="checkbox-field">
-          <input
-            type="checkbox"
-            checked={stripPrefix}
-            onChange={(e) => setStripPrefix(e.target.checked)}
-          />
-          Strip prefix
-        </label>
         <button type="submit" className="primary" disabled={submitting}>
           {submitting ? "Creating…" : "Create route"}
         </button>
