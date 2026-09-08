@@ -14,3 +14,7 @@ CMakeUserPresets.json
 
 web/node_modules/
 web/dist/
+
+# Host-specific compose overrides (e.g. CONTAINER_ENGINE_SOCKET under
+# Podman) -- see .env.example.
+.env
