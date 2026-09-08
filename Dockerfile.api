@@ -3,7 +3,13 @@
 # ---- build stage ------------------------------------------------------
 FROM ubuntu:24.04 AS build
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Under rootless Podman, apt's sandboxed downloader (which drops from root
+# to the _apt user/nogroup via setgroups/setegid) fails with EINVAL unless
+# the host's subuid/subgid mapping happens to cover gid 65534 -- disabling
+# the sandbox keeps this portable across Docker and Podman without relying
+# on host user-namespace config. Safe here: this RUN already runs as root.
+RUN echo 'APT::Sandbox::User "root";' > /etc/apt/apt.conf.d/99no-sandbox \
+    && apt-get update && apt-get install -y --no-install-recommends \
       build-essential cmake git ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
@@ -21,7 +27,9 @@ RUN cmake -B build -DCMAKE_BUILD_TYPE=Release -DKINGDOM_PROXY_BUILD_TESTS=OFF &&
 # ---- runtime stage ------------------------------------------------------
 FROM ubuntu:24.04
 
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates wget \
+# See the build stage's comment above -- same rootless-Podman apt sandbox issue.
+RUN echo 'APT::Sandbox::User "root";' > /etc/apt/apt.conf.d/99no-sandbox \
+    && apt-get update && apt-get install -y --no-install-recommends ca-certificates wget \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /src/build/kingdom-proxy-api /usr/local/bin/kingdom-proxy-api
