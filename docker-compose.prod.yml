@@ -30,11 +30,21 @@ services:
     volumes:
       - nginx-conf:/etc/nginx/conf.d
       # Cert/key this stack does not generate or obtain itself -- bring
-      # your own (fullchain.pem + privkey.pem, see nginx/nginx.tls.conf)
-      # in a host directory and point TLS_CERT_DIR at it; defaults to
-      # ./certs. ":z" relabels for SELinux (common on Podman's usual
-      # hosts); harmless no-op where SELinux isn't enforced.
-      - ${TLS_CERT_DIR:-./certs}:/etc/nginx/certs:ro,z
+      # your own. Mounted as two independent files rather than one
+      # directory since a real host's cert and key are rarely
+      # co-located with matching names (e.g. RHEL/CentOS convention:
+      # key under /etc/pki/tls/private/, cert under /etc/pki/tls/certs/,
+      # named after the host, not "privkey"/"fullchain"). Point
+      # TLS_CERT_FILE/TLS_KEY_FILE at wherever they actually are; each
+      # defaults to the throwaway pair scripts/gen-dev-cert.sh writes to
+      # ./certs/. TLS_CERT_FILE must be the full chain (this host's leaf
+      # cert plus any intermediate CA certs) if clients need to validate
+      # it -- a bare leaf cert from an internal CA will fail validation
+      # for anyone who doesn't already trust that CA directly. ":z"
+      # relabels for SELinux (common on Podman's usual hosts); harmless
+      # no-op where SELinux isn't enforced.
+      - ${TLS_CERT_FILE:-./certs/fullchain.pem}:/etc/nginx/certs/fullchain.pem:ro,z
+      - ${TLS_KEY_FILE:-./certs/privkey.pem}:/etc/nginx/certs/privkey.pem:ro,z
     networks:
       - kingdom-net
     restart: unless-stopped

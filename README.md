@@ -206,21 +206,52 @@ docker compose -f docker-compose.prod.yml up -d --build
 # or: podman compose -f docker-compose.prod.yml up -d --build
 ```
 
-It doesn't generate or obtain a certificate itself — bring your own.
-Before first start, put `fullchain.pem` and `privkey.pem` in `./certs/`
-(or set `TLS_CERT_DIR` to point elsewhere, the same way
-`CONTAINER_ENGINE_SOCKET` works for the Docker/Podman socket path — see
-[Running under Podman](#running-under-podman)); nginx refuses to start if
-either file is missing. To smoke-test the TLS wiring itself before a real
-cert is in hand:
+It doesn't generate or obtain a certificate itself — bring your own,
+**both halves of it**: nginx needs the certificate (`TLS_CERT_FILE` —
+this host's cert, and if it's from a CA clients don't already trust
+directly, the intermediate chain too, concatenated after it: cert first,
+then chain) as well as the private key (`TLS_KEY_FILE`) that pairs with
+it. A private key on its own — e.g. a bare `somehost.key` with no
+matching `.crt` — isn't sufficient; nginx can't terminate TLS without
+something to actually present to clients, and refuses to start if either
+file is missing:
 
 ```sh
-./scripts/gen-dev-cert.sh   # writes a throwaway self-signed pair to ./certs/
+export TLS_CERT_FILE=/etc/pki/tls/certs/somehost.crt
+export TLS_KEY_FILE=/etc/pki/tls/private/somehost.key
+```
+
+(or set them in `.env` instead of exporting — see `.env.example` — the
+same pattern `CONTAINER_ENGINE_SOCKET` uses; see
+[Running under Podman](#running-under-podman)). Both default to
+`./certs/fullchain.pem` / `./certs/privkey.pem` if unset, which is where
+`scripts/gen-dev-cert.sh` writes a throwaway self-signed pair for
+smoke-testing the TLS wiring itself before a real cert is in hand:
+
+```sh
+./scripts/gen-dev-cert.sh
 curl -k https://localhost/healthz   # -k: this test cert isn't signed by a real CA
 ```
 
 (drop `-k` once real certs are in place — dropping it against the
 self-signed dev pair will fail certificate verification, as expected.)
+
+**Rootless Podman and a root-owned private key:** a private key handed
+out by IT/an internal CA (e.g. under `/etc/pki/tls/private/`) is typically
+`root`-owned, mode `600` — deliberately unreadable by anyone else. Under
+**rootful** Podman/Docker that's fine, the daemon runs as real root.
+Under **rootless** Podman, container-root maps to your unprivileged host
+user, not real host root, so a bind-mounted file only readable by host
+root stays unreadable inside the container too (`:z` only relabels for
+SELinux, it doesn't change who can read the file) — nginx will fail to
+start with a permission error on that path. Either run this stack rootful
+for real deployments holding real key material (`sudo podman compose -f
+docker-compose.prod.yml up -d --build`, with `CONTAINER_ENGINE_SOCKET`
+pointed at the rootful socket — see the Podman section above; this also
+sidesteps the privileged-port issue below), or ask whoever manages the
+host to grant your user read access without loosening it for everyone
+else, e.g. via a POSIX ACL: `setfacl -m u:<your-user>:r
+/etc/pki/tls/private/somehost.key`.
 
 **Binding host ports below 1024:** both `:80` and `:443` are privileged
 ports. A rootful Docker/Podman daemon can bind them freely; **rootless**
