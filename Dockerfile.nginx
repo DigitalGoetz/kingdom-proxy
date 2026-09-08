@@ -2,7 +2,7 @@
 
 # ---- web build stage ------------------------------------------------------
 # The React dashboard, built to static assets and served from nginx's
-# document root -- see the `location /` block in nginx.baseline.conf.
+# document root -- see the `location /` block in nginx/kp-locations.conf.
 FROM node:22-alpine AS web-build
 
 WORKDIR /web
@@ -14,7 +14,14 @@ RUN npm run build
 # ---- runtime stage ----------------------------------------------------
 FROM nginx:1.27-alpine
 
-COPY nginx/nginx.baseline.conf /etc/nginx/nginx.conf
+# nginx.baseline.conf (plain HTTP, the dev/demo default) or nginx.tls.conf
+# (TLS-terminating production config -- see docker-compose.prod.yml, which
+# sets this) -- see README.md's "HTTPS / TLS" section. Either way it
+# `include`s kp-locations.conf, copied below, for the actual
+# route/admin/dashboard behavior the two share.
+ARG NGINX_CONF=nginx.baseline.conf
+COPY nginx/kp-locations.conf /etc/nginx/kp-locations.conf
+COPY nginx/${NGINX_CONF} /etc/nginx/nginx.conf
 COPY --from=web-build /web/dist /usr/share/nginx/html
 
 # Detects the container runtime's embedded DNS resolver at startup and

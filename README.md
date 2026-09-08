@@ -2,8 +2,9 @@
 
 A programmable reverse proxy for routing to locally running containers by
 path — runs under Docker or Podman (see
-[Running under Podman](#running-under-podman)) — built as three cooperating
-pieces:
+[Running under Podman](#running-under-podman)), plain HTTP by default or
+TLS-terminated on 443 in production (see [HTTPS / TLS](#https--tls)) —
+built as three cooperating pieces:
 
 - **nginx** — does the actual proxying. Runs with a small static baseline
   config plus one generated file that holds all dynamic routes, and also
@@ -188,6 +189,59 @@ Docker-compatibility rather than verified against a live Podman daemon, so
 give it that same smoke test (create a route, confirm traffic flows, then
 restart the target container and confirm the route still works) before
 relying on it.
+
+## HTTPS / TLS
+
+The default stack (`docker-compose.yml`, `nginx.baseline.conf`) serves
+plain HTTP on host port 4800, as described above — no certs, no setup,
+good for local dev/demo. `docker-compose.prod.yml` is a separate,
+TLS-terminating alternative for actually deploying this somewhere:
+nginx listens on host `:443` for real traffic and `:80` only to redirect
+to it (plus the health check nginx's own container relies on, see
+`nginx/nginx.tls.conf`). Run it *instead of* `docker-compose.yml`, not
+layered on top of it (see the comment at the top of the file for why):
+
+```sh
+docker compose -f docker-compose.prod.yml up -d --build
+# or: podman compose -f docker-compose.prod.yml up -d --build
+```
+
+It doesn't generate or obtain a certificate itself — bring your own.
+Before first start, put `fullchain.pem` and `privkey.pem` in `./certs/`
+(or set `TLS_CERT_DIR` to point elsewhere, the same way
+`CONTAINER_ENGINE_SOCKET` works for the Docker/Podman socket path — see
+[Running under Podman](#running-under-podman)); nginx refuses to start if
+either file is missing. To smoke-test the TLS wiring itself before a real
+cert is in hand:
+
+```sh
+./scripts/gen-dev-cert.sh   # writes a throwaway self-signed pair to ./certs/
+curl -k https://localhost/healthz   # -k: this test cert isn't signed by a real CA
+```
+
+(drop `-k` once real certs are in place — dropping it against the
+self-signed dev pair will fail certificate verification, as expected.)
+
+**Binding host ports below 1024:** both `:80` and `:443` are privileged
+ports. A rootful Docker/Podman daemon can bind them freely; **rootless**
+Podman (or rootless Docker) typically can't by default, and `compose up`
+will fail with something like `rootlessport listen tcp 0.0.0.0:443: bind:
+permission denied`. Either run rootful (`sudo podman compose -f
+docker-compose.prod.yml up -d --build`, with `CONTAINER_ENGINE_SOCKET`
+pointed at the rootful socket per the Podman section above), or allow your
+regular user to bind low ports on this host:
+
+```sh
+sudo sysctl -w net.ipv4.ip_unprivileged_port_start=80
+```
+
+(add it to `/etc/sysctl.d/` to survive a reboot).
+
+Everything else — registering routes, the dashboard, the admin API —
+works identically to the plain-HTTP stack; only the scheme and port
+change. `$scheme` in nginx's generated redirects (bare route prefixes,
+`/_proxy` → `/_proxy/`) resolves to `https` automatically once traffic is
+actually arriving over `:443`, so no route/API behavior differs.
 
 ## Web dashboard
 

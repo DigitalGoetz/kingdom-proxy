@@ -18,3 +18,7 @@ web/dist/
 # Host-specific compose overrides (e.g. CONTAINER_ENGINE_SOCKET under
 # Podman) -- see .env.example.
 .env
+
+# TLS cert/key for docker-compose.prod.yml -- see README.md's "HTTPS / TLS"
+# section. Never committed, real or test.
+/certs/

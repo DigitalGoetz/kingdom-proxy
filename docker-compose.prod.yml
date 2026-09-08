@@ -1,0 +1,78 @@
+# TLS-terminating production alternative to docker-compose.yml -- run this
+# file *instead of* that one (not layered on top of it via `-f a -f b`;
+# Compose concatenates list fields like `ports`/`volumes` across files
+# rather than replacing them, which would leave the old plain-HTTP :4800
+# mapping in place alongside this file's :80/:443 -- so it's a full,
+# independent copy of the stack rather than an override):
+#
+#   docker compose -f docker-compose.prod.yml up -d --build
+#   podman compose -f docker-compose.prod.yml up -d --build
+#
+# See README.md's "HTTPS / TLS" section for the certificate setup this
+# needs before first start, and the rootless-Podman/Docker privileged-port
+# (<1024) caveat for binding host :80/:443 at all.
+#
+# Bring the dev stack down first if it's running (`compose down`, no `-f`)
+# -- both files use the same container names, network, and volumes, so the
+# two aren't meant to run at once.
+
+services:
+  nginx:
+    build:
+      context: .
+      dockerfile: Dockerfile.nginx
+      args:
+        NGINX_CONF: nginx.tls.conf
+    container_name: kingdom-proxy-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - nginx-conf:/etc/nginx/conf.d
+      # Cert/key this stack does not generate or obtain itself -- bring
+      # your own (fullchain.pem + privkey.pem, see nginx/nginx.tls.conf)
+      # in a host directory and point TLS_CERT_DIR at it; defaults to
+      # ./certs. ":z" relabels for SELinux (common on Podman's usual
+      # hosts); harmless no-op where SELinux isn't enforced.
+      - ${TLS_CERT_DIR:-./certs}:/etc/nginx/certs:ro,z
+    networks:
+      - kingdom-net
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: kingdom-proxy-api
+    environment:
+      KP_HTTP_HOST: "0.0.0.0"
+      KP_HTTP_PORT: "9000"
+      KP_DB_PATH: "/data/kingdom-proxy.db"
+      KP_DOCKER_SOCKET: "/var/run/docker.sock"
+      KP_NGINX_CONF_PATH: "/etc/nginx/conf.d/kingdom-routes.conf"
+      KP_NGINX_CONTAINER_NAME: "kingdom-proxy-nginx"
+      KP_NETWORK_NAME: "kingdom-net"
+      KP_SYNC_INTERVAL_SECONDS: "30"
+    ports:
+      # Admin API stays on loopback by default -- it's unauthenticated.
+      # Widen this only if you know what you're doing.
+      - "127.0.0.1:4810:9000"
+    volumes:
+      - nginx-conf:/etc/nginx/conf.d
+      - api-data:/data
+      # See docker-compose.yml's identical line for what this is and how
+      # to point it at Docker vs. Podman's socket.
+      - ${CONTAINER_ENGINE_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock:ro,z
+    networks:
+      - kingdom-net
+    depends_on:
+      - nginx
+    restart: unless-stopped
+
+networks:
+  kingdom-net:
+    name: kingdom-net
+
+volumes:
+  nginx-conf:
+  api-data:
