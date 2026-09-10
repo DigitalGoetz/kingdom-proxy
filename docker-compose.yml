@@ -46,10 +46,25 @@ services:
       # The container-internal path is unaffected: it's always
       # /var/run/docker.sock in there, matching KP_DOCKER_SOCKET's default
       # above, regardless of what the host side actually is.
-      # ":z" relabels the socket for SELinux (common on Podman's usual
-      # hosts, Fedora/RHEL/CentOS); it's a harmless no-op where SELinux
-      # isn't enforced, so this is left on unconditionally for both.
-      - ${CONTAINER_ENGINE_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock:ro,z
+      # Deliberately no ":z" here, unlike the TLS cert/key mounts in
+      # docker-compose.prod.yml. ":z" relabels its target to the generic
+      # shared-content type (container_file_t), which is right for plain
+      # files but wrong for this socket: Podman's rootless API socket
+      # already carries whatever label its own SELinux policy grants
+      # containers "connectto" access to, and relabeling it to
+      # container_file_t overwrites that with a type the policy does
+      # *not* grant connectto on -- so on an SELinux-*enforcing* host
+      # (RHEL/Fedora/CentOS) adding ":z" here doesn't just no-op, it
+      # breaks the socket: connections fail with a generic "Could not
+      # establish connection" (surfaced in the UI as "cannot reach
+      # docker socket"), and the label change persists on the host file
+      # even after the container is removed. If you've already hit
+      # this (`ls -Z` on the socket shows container_file_t), recreate it
+      # so Podman reapplies its normal label:
+      #   systemctl --user stop podman.socket podman.service
+      #   rm -f "$XDG_RUNTIME_DIR/podman/podman.sock"
+      #   systemctl --user start podman.socket
+      - ${CONTAINER_ENGINE_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock:ro
     networks:
       - kingdom-net
     depends_on:

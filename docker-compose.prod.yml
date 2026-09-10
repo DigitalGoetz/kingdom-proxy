@@ -70,9 +70,10 @@ services:
     volumes:
       - nginx-conf:/etc/nginx/conf.d
       - api-data:/data
-      # See docker-compose.yml's identical line for what this is and how
-      # to point it at Docker vs. Podman's socket.
-      - ${CONTAINER_ENGINE_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock:ro,z
+      # See docker-compose.yml's identical line for what this is, how to
+      # point it at Docker vs. Podman's socket, and why it deliberately
+      # has no ":z" (unlike the TLS cert/key mounts above, which do).
+      - ${CONTAINER_ENGINE_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock:ro
     networks:
       - kingdom-net
     depends_on:

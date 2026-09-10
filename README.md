@@ -239,19 +239,44 @@ self-signed dev pair will fail certificate verification, as expected.)
 **Rootless Podman and a root-owned private key:** a private key handed
 out by IT/an internal CA (e.g. under `/etc/pki/tls/private/`) is typically
 `root`-owned, mode `600` — deliberately unreadable by anyone else. Under
-**rootful** Podman/Docker that's fine, the daemon runs as real root.
-Under **rootless** Podman, container-root maps to your unprivileged host
-user, not real host root, so a bind-mounted file only readable by host
-root stays unreadable inside the container too (`:z` only relabels for
-SELinux, it doesn't change who can read the file) — nginx will fail to
-start with a permission error on that path. Either run this stack rootful
-for real deployments holding real key material (`sudo podman compose -f
-docker-compose.prod.yml up -d --build`, with `CONTAINER_ENGINE_SOCKET`
-pointed at the rootful socket — see the Podman section above; this also
-sidesteps the privileged-port issue below), or ask whoever manages the
-host to grant your user read access without loosening it for everyone
-else, e.g. via a POSIX ACL: `setfacl -m u:<your-user>:r
-/etc/pki/tls/private/somehost.key`.
+**rootful** Podman/Docker that's fine, the daemon runs as real root. Under
+**rootless** Podman, container-root maps to your unprivileged host user,
+not real host root, and this bites twice:
+
+- nginx itself can't read a file only host-root can read, once it's in
+  the container.
+- Getting there can fail even earlier: docker-compose.prod.yml's cert/key
+  mounts use the `:z` flag, which has Podman relabel the host file's
+  SELinux context (`lsetxattr`) so the container is allowed to read it at
+  all. That relabel is a write to the file's security context, which your
+  unprivileged user has no permission to do to a file it doesn't own —
+  independent of read permission, and independent of SELinux policy. This
+  fails with something like `lsetxattr(label=...) ...key: operation not
+  permitted`.
+
+Either run this stack rootful for real deployments holding real key
+material (`sudo podman compose -f docker-compose.prod.yml up -d --build`,
+with `CONTAINER_ENGINE_SOCKET` pointed at the rootful socket — see the
+Podman section above; this also sidesteps the privileged-port issue
+below) — real root can read and relabel the originals directly, no
+workaround needed — or stay rootless and copy the cert/key into a
+directory *your own user* owns first, which sidesteps both problems the
+same way any other rootless bind mount does:
+
+```sh
+./scripts/sync-tls-cert.sh /etc/pki/tls/certs/somehost.crt /etc/pki/tls/private/somehost.key
+export TLS_CERT_FILE=~/kingdom-proxy-tls/fullchain.pem
+export TLS_KEY_FILE=~/kingdom-proxy-tls/privkey.pem
+```
+
+That's a point-in-time copy, not a link — re-run it after the source
+cert/key are ever renewed. Also worth confirming with whoever issued it:
+a certificate file that's just the leaf cert (a couple KB, no chain) is
+enough if every client already trusts the issuing CA directly; if it's an
+internal CA most clients don't already trust, `TLS_CERT_FILE` needs to be
+the leaf cert with the intermediate chain appended after it (`cat
+somehost.crt intermediate.crt > fullchain.pem`, source order matters:
+leaf first) or clients will fail to validate the connection.
 
 **Binding host ports below 1024:** both `:80` and `:443` are privileged
 ports. A rootful Docker/Podman daemon can bind them freely; **rootless**

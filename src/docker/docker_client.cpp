@@ -190,11 +190,14 @@ DockerClient::ExecResult DockerClient::exec(const std::string& container_name,
   auto create_res =
       client.Post(std::format("/containers/{}/exec", container_name), create_body.dump(),
                   "application/json");
-  if (!create_res || create_res->status != 201) {
-    const int status = create_res ? create_res->status : -1;
-    const std::string body = create_res ? create_res->body : "";
+  if (!create_res) {
+    KP_LOG_ERROR(kComponent, "failed to reach docker socket at '{}': {}", socket_path_,
+                 httplib::to_string(create_res.error()));
+    throw std::runtime_error(std::format("cannot reach docker socket at '{}'", socket_path_));
+  }
+  if (create_res->status != 201) {
     throw std::runtime_error(std::format("failed to create exec in container '{}': HTTP {}: {}",
-                                          container_name, status, body));
+                                          container_name, create_res->status, create_res->body));
   }
   const std::string exec_id = json::parse(create_res->body).value("Id", "");
   if (exec_id.empty()) {
@@ -206,9 +209,14 @@ DockerClient::ExecResult DockerClient::exec(const std::string& container_name,
   json start_body = {{"Detach", false}, {"Tty", false}};
   auto start_res =
       client.Post(std::format("/exec/{}/start", exec_id), start_body.dump(), "application/json");
-  if (!start_res || start_res->status != 200) {
-    const int status = start_res ? start_res->status : -1;
-    throw std::runtime_error(std::format("failed to start exec '{}': HTTP {}", exec_id, status));
+  if (!start_res) {
+    KP_LOG_ERROR(kComponent, "failed to reach docker socket at '{}': {}", socket_path_,
+                 httplib::to_string(start_res.error()));
+    throw std::runtime_error(std::format("cannot reach docker socket at '{}'", socket_path_));
+  }
+  if (start_res->status != 200) {
+    throw std::runtime_error(
+        std::format("failed to start exec '{}': HTTP {}", exec_id, start_res->status));
   }
   const std::string output = demux_stream(start_res->body);
 
