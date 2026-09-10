@@ -21,6 +21,14 @@ services:
       context: .
       dockerfile: Dockerfile.api
     container_name: kingdom-proxy-api
+    # See docker-compose.prod.yml's identical line: on an SELinux-
+    # enforcing host, container_t (the default confined domain) has no
+    # "connectto" rule for a mounted-in docker/podman socket even once
+    # the socket itself is labeled container_var_run_t -- container_runtime_t
+    # is the domain container-selinux ships for this. No admin/root
+    # needed, no-op where SELinux isn't enforced.
+    security_opt:
+      - label=type:container_runtime_t
     environment:
       KP_HTTP_HOST: "0.0.0.0"
       KP_HTTP_PORT: "9000"

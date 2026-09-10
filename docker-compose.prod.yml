@@ -54,6 +54,20 @@ services:
       context: .
       dockerfile: Dockerfile.api
     container_name: kingdom-proxy-api
+    # On an SELinux-enforcing host, the default confined domain
+    # (container_t) doesn't have a "connectto" rule for the socket types
+    # used by a mounted-in docker/podman API socket, even once the socket
+    # itself carries the right label (container_var_run_t) -- container_t
+    # is deliberately restrictive about reaching outside its own
+    # container. container_runtime_t is the domain container-selinux
+    # ships specifically for containers that legitimately need this (the
+    # same trust boundary Dockerfile.api's own comment already calls out:
+    # this container is handed the host's container-engine socket and
+    # should be treated as privileged). No admin/root needed -- this only
+    # loosens confinement on this container itself. A no-op where SELinux
+    # isn't enforced.
+    security_opt:
+      - label=type:container_runtime_t
     environment:
       KP_HTTP_HOST: "0.0.0.0"
       KP_HTTP_PORT: "9000"
